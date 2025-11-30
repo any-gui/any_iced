@@ -352,7 +352,7 @@ pub fn draw<Renderer>(
     renderer.fill_paragraph(
         paragraph,
         anchor,
-        appearance.color.unwrap_or(style.text_color),
+        appearance.color.unwrap_or(style.text_color).scale_alpha(style.opacity),
         *viewport,
     );
 }

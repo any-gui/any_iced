@@ -359,6 +359,7 @@ where
                     text_color: style
                         .text_color
                         .unwrap_or(renderer_style.text_color),
+                    opacity: renderer_style.opacity,
                 },
                 layout.children().next().unwrap(),
                 cursor,

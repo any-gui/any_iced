@@ -547,6 +547,7 @@ where
 
         let defaults = renderer::Style {
             text_color: style.text_color.unwrap_or(inherited_style.text_color),
+            opacity: inherited_style.opacity,
         };
 
         self.tooltip.as_widget().draw(

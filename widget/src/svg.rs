@@ -243,7 +243,7 @@ where
         renderer.draw_svg(
             svg::Svg {
                 handle: self.handle.clone(),
-                color: style.color,
+                color: style.color.map(|c|c.scale_alpha(_style.opacity)),
                 rotation: self.rotation.radians(),
                 opacity: self.opacity,
             },

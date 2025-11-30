@@ -106,12 +106,15 @@ impl Default for Quad {
 pub struct Style {
     /// The text color
     pub text_color: Color,
+    /// The Opacity of Widget
+    pub opacity: f32,
 }
 
 impl Default for Style {
     fn default() -> Self {
         Style {
             text_color: Color::BLACK,
+            opacity: 1.,
         }
     }
 }
