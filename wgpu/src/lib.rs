@@ -45,7 +45,7 @@ mod image;
 #[path = "image/null.rs"]
 mod image;
 
-use buffer::Buffer;
+pub use buffer::Buffer;
 
 use iced_debug as debug;
 pub use iced_graphics as graphics;
