@@ -362,7 +362,29 @@ impl Renderer {
                     .write()
                     .expect("Write primitive storage");
 
+                #[cfg(any(feature = "image", feature = "svg"))]
+                let mut image_cache = self.image_cache.borrow_mut();
+
                 for instance in &layer.primitives {
+                    #[cfg(any(feature = "image", feature = "svg"))]
+                    {
+                        // 检查是否是 image primitive
+                        if instance.primitive.is_image_primitive() {
+                            instance.primitive.prepare_image_primitive(
+                                &mut primitive_storage,
+                                &self.engine.device,
+                                &self.engine.queue,
+                                self.engine.format,
+                                &instance.bounds,
+                                viewport,
+                                &mut image_cache,
+                                encoder,
+                                &mut self.staging_belt,
+                            );
+                            continue;
+                        }
+                    }
+
                     instance.primitive.prepare(
                         &mut primitive_storage,
                         &self.engine.device,
@@ -538,6 +560,9 @@ impl Renderer {
                     .read()
                     .expect("Read primitive storage");
 
+                #[cfg(any(feature = "image", feature = "svg"))]
+                let image_cache = self.image_cache.borrow();
+
                 let mut need_render = Vec::new();
 
                 for instance in &layer.primitives {
@@ -593,6 +618,21 @@ impl Renderer {
                     let _ = ManuallyDrop::into_inner(render_pass);
 
                     for (instance, clip_bounds) in need_render {
+                        #[cfg(any(feature = "image", feature = "svg"))]
+                        {
+                            // 检查是否是 image primitive，如果是则调用 render_image_primitive
+                            if instance.primitive.is_image_primitive() {
+                                instance.primitive.render_image_primitive(
+                                    &primitive_storage,
+                                    encoder,
+                                    frame,
+                                    &clip_bounds,
+                                    &image_cache,
+                                );
+                                continue;
+                            }
+                        }
+
                         instance.primitive.render(
                             &primitive_storage,
                             encoder,

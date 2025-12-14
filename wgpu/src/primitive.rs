@@ -65,6 +65,50 @@ pub trait Primitive: Debug + MaybeSend + MaybeSync + 'static {
         _clip_bounds: &Rectangle<u32>,
     ) {
     }
+
+    /// Returns `true` if this [`Primitive`] is an image primitive that needs cache.
+    ///
+    /// If this returns `true`, `prepare_image_primitive` and `render_image_primitive`
+    /// will be called instead of the regular `prepare` and `render` methods.
+    #[cfg(any(feature = "image", feature = "svg"))]
+    fn is_image_primitive(&self) -> bool {
+        false
+    }
+
+    /// Prepares an image primitive with access to the image cache.
+    ///
+    /// This is only called if `is_image_primitive()` returns `true`.
+    #[cfg(any(feature = "image", feature = "svg"))]
+    fn prepare_image_primitive(
+        &self,
+        pipeline: &mut Self::Pipeline,
+        device: &wgpu::Device,
+        queue: &wgpu::Queue,
+        bounds: &Rectangle,
+        viewport: &Viewport,
+        cache: &mut crate::image::Cache,
+        encoder: &mut wgpu::CommandEncoder,
+        belt: &mut wgpu::util::StagingBelt,
+    ) {
+        // 默认实现：调用普通的 prepare
+        self.prepare(pipeline, device, queue, bounds, viewport);
+    }
+
+    /// Renders an image primitive with access to the image cache.
+    ///
+    /// This is only called if `is_image_primitive()` returns `true`.
+    #[cfg(any(feature = "image", feature = "svg"))]
+    fn render_image_primitive(
+        &self,
+        pipeline: &Self::Pipeline,
+        encoder: &mut wgpu::CommandEncoder,
+        target: &wgpu::TextureView,
+        clip_bounds: &Rectangle<u32>,
+        _cache: &crate::image::Cache,
+    ) {
+        // 默认实现：调用普通的 render
+        self.render(pipeline, encoder, target, clip_bounds);
+    }
 }
 
 /// The pipeline of a graphics [`Primitive`].
@@ -112,6 +156,35 @@ pub(crate) trait Stored:
         encoder: &mut wgpu::CommandEncoder,
         target: &wgpu::TextureView,
         clip_bounds: &Rectangle<u32>,
+    );
+
+    #[cfg(any(feature = "image", feature = "svg"))]
+    fn is_image_primitive(&self) -> bool {
+        false
+    }
+
+    #[cfg(any(feature = "image", feature = "svg"))]
+    fn prepare_image_primitive(
+        &self,
+        storage: &mut Storage,
+        device: &wgpu::Device,
+        queue: &wgpu::Queue,
+        format: wgpu::TextureFormat,
+        bounds: &Rectangle,
+        viewport: &Viewport,
+        cache: &mut crate::image::Cache,
+        encoder: &mut wgpu::CommandEncoder,
+        belt: &mut wgpu::util::StagingBelt,
+    );
+
+    #[cfg(any(feature = "image", feature = "svg"))]
+    fn render_image_primitive(
+        &self,
+        storage: &Storage,
+        encoder: &mut wgpu::CommandEncoder,
+        target: &wgpu::TextureView,
+        clip_bounds: &Rectangle<u32>,
+        cache: &crate::image::Cache,
     );
 }
 
@@ -173,6 +246,73 @@ impl<P: Primitive> Stored for BlackBox<P> {
 
         self.primitive
             .render(renderer, encoder, target, clip_bounds);
+    }
+
+    #[cfg(any(feature = "image", feature = "svg"))]
+    fn is_image_primitive(&self) -> bool {
+        self.primitive.is_image_primitive()
+    }
+
+    #[cfg(any(feature = "image", feature = "svg"))]
+    fn prepare_image_primitive(
+        &self,
+        storage: &mut Storage,
+        device: &wgpu::Device,
+        queue: &wgpu::Queue,
+        format: wgpu::TextureFormat,
+        bounds: &Rectangle,
+        viewport: &Viewport,
+        cache: &mut crate::image::Cache,
+        encoder: &mut wgpu::CommandEncoder,
+        belt: &mut wgpu::util::StagingBelt,
+    ) {
+        if !storage.has::<P>() {
+            storage.store::<P, _>(P::Pipeline::new(device, queue, format));
+        }
+
+        let renderer = storage
+            .get_mut::<P>()
+            .expect("renderer should be initialized")
+            .downcast_mut::<P::Pipeline>()
+            .expect("renderer should have the proper type");
+
+        self.primitive.prepare_image_primitive(
+            renderer,
+            device,
+            queue,
+            bounds,
+            viewport,
+            cache,
+            encoder,
+            belt,
+        );
+    }
+
+    #[cfg(any(feature = "image", feature = "svg"))]
+    fn render_image_primitive(
+        &self,
+        storage: &Storage,
+        encoder: &mut wgpu::CommandEncoder,
+        target: &wgpu::TextureView,
+        clip_bounds: &Rectangle<u32>,
+        cache: &crate::image::Cache,
+    ) {
+        let renderer = storage
+            .get::<P>()
+            .expect("renderer should be initialized")
+            .downcast_ref::<P::Pipeline>()
+            .expect("renderer should have the proper type");
+
+        // 先尝试使用 draw 方法（在 render pass 中）
+        // 如果 draw 返回 false，则使用 render 方法
+        // 但这里我们需要 render pass，所以直接调用 render_image_primitive
+        self.primitive.render_image_primitive(
+            renderer,
+            encoder,
+            target,
+            clip_bounds,
+            cache,
+        );
     }
 }
 

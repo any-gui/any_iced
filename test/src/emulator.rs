@@ -475,6 +475,7 @@ impl<P: Program + 'static> Emulator<P> {
             theme,
             &renderer::Style {
                 text_color: style.text_color,
+                opacity: 0.0,
             },
             mouse::Cursor::Unavailable,
         );
