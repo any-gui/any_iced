@@ -39,7 +39,7 @@ mod triangle;
 
 #[cfg(any(feature = "image", feature = "svg"))]
 #[path = "image/mod.rs"]
-mod image;
+pub mod image;
 
 #[cfg(not(any(feature = "image", feature = "svg")))]
 #[path = "image/null.rs"]
