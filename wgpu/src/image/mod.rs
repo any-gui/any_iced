@@ -1,7 +1,10 @@
-pub(crate) mod cache;
-pub(crate) use cache::Cache;
+pub mod cache;
+pub use cache::Cache;
 
 mod atlas;
+
+/// For Image Primitive
+pub use atlas::{Atlas, Entry, Allocation};
 
 #[cfg(feature = "image")]
 mod raster;
