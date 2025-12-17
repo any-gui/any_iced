@@ -220,6 +220,7 @@ impl geometry::frame::Backend for Frame {
         options.start_cap = into_line_cap(stroke.line_cap);
         options.end_cap = into_line_cap(stroke.line_cap);
         options.line_join = into_line_join(stroke.line_join);
+        options.tolerance = 0.01;
 
         let path = if stroke.line_dash.segments.is_empty() {
             Cow::Borrowed(path)
