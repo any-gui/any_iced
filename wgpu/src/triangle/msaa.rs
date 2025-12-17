@@ -131,7 +131,7 @@ impl Pipeline {
         }
     }
 
-    fn targets(
+    pub fn targets(
         &self,
         device: &wgpu::Device,
         region_size: Size<u32>,
@@ -179,10 +179,14 @@ impl Pipeline {
             occlusion_query_set: None,
         })
     }
+
+    pub fn get_targets(&self) -> &Arc<RwLock<Option<Targets>>> {
+        &self.targets
+    }
 }
 
 #[derive(Debug, Clone)]
-struct Targets {
+pub struct Targets {
     attachment: wgpu::TextureView,
     resolve: wgpu::TextureView,
     bind_group: wgpu::BindGroup,

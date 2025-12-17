@@ -35,7 +35,7 @@ mod color;
 mod engine;
 mod quad;
 mod text;
-mod triangle;
+pub mod triangle;
 
 #[cfg(any(feature = "image", feature = "svg"))]
 #[path = "image/mod.rs"]
