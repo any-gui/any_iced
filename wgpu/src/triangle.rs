@@ -1,5 +1,5 @@
 //! Draw meshes of triangles.
-mod msaa;
+pub mod msaa;
 
 use crate::Buffer;
 use crate::core::{Point, Rectangle, Size, Transformation, Vector};
