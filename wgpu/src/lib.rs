@@ -36,6 +36,7 @@ mod engine;
 mod quad;
 mod text;
 pub mod triangle;
+pub use triangle::msaa;
 
 #[cfg(any(feature = "image", feature = "svg"))]
 #[path = "image/mod.rs"]
