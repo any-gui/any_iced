@@ -30,13 +30,15 @@ pub mod window;
 #[cfg(feature = "geometry")]
 pub mod geometry;
 
+#[cfg(feature = "geometry")]
+pub use lyon;
+
 mod buffer;
 mod color;
 mod engine;
 mod quad;
 mod text;
-pub mod triangle;
-pub use triangle::msaa;
+mod triangle;
 
 #[cfg(any(feature = "image", feature = "svg"))]
 #[path = "image/mod.rs"]

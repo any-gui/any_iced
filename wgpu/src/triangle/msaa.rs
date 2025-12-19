@@ -131,7 +131,7 @@ impl Pipeline {
         }
     }
 
-    pub fn targets(
+    fn targets(
         &self,
         device: &wgpu::Device,
         region_size: Size<u32>,
@@ -186,7 +186,7 @@ impl Pipeline {
 }
 
 #[derive(Debug, Clone)]
-pub struct Targets {
+struct Targets {
     attachment: wgpu::TextureView,
     resolve: wgpu::TextureView,
     bind_group: wgpu::BindGroup,
