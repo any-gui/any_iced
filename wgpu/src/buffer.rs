@@ -12,7 +12,7 @@ pub struct Buffer<T> {
     label: &'static str,
     size: u64,
     usage: wgpu::BufferUsages,
-    pub(crate) raw: wgpu::Buffer,
+    pub raw: wgpu::Buffer,
     type_: PhantomData<T>,
 }
 
