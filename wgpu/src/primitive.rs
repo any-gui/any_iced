@@ -89,7 +89,6 @@ pub trait Primitive: Debug + MaybeSend + MaybeSync + 'static {
         cache: &mut crate::image::Cache,
         encoder: &mut wgpu::CommandEncoder,
         belt: &mut wgpu::util::StagingBelt,
-        backend: wgpu::Backend
     ) {
         // 默认实现：调用普通的 prepare
         self.prepare(pipeline, device, queue, bounds, viewport);
@@ -149,6 +148,18 @@ pub trait Pipeline: Any + MaybeSend + MaybeSync {
     ) -> Self
     where
         Self: Sized;
+
+    fn new_with_backend(
+        device: &wgpu::Device,
+        queue: &wgpu::Queue,
+        format: wgpu::TextureFormat,
+        backend: wgpu::Backend,
+    ) -> Self
+    where
+        Self: Sized
+    {
+        Self::new(device, queue, format)
+    }
 
     /// Trims any cached data in the [`Pipeline`].
     ///
@@ -314,7 +325,7 @@ impl<P: Primitive> Stored for BlackBox<P> {
         backend: wgpu::Backend
     ) {
         if !storage.has::<P>() {
-            storage.store::<P, _>(P::Pipeline::new(device, queue, format));
+            storage.store::<P, _>(P::Pipeline::new_with_backend(device, queue, format,backend));
         }
 
         let renderer = storage
@@ -332,7 +343,6 @@ impl<P: Primitive> Stored for BlackBox<P> {
             cache,
             encoder,
             belt,
-            backend
         );
     }
 
