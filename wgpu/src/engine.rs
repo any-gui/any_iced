@@ -18,6 +18,8 @@ pub struct Engine {
     #[cfg(any(feature = "image", feature = "svg"))]
     pub(crate) image_pipeline: crate::image::Pipeline,
     pub(crate) primitive_storage: Arc<RwLock<primitive::Storage>>,
+
+    pub(crate) backend: wgpu::Backend,
     _shell: Shell,
 }
 
@@ -30,6 +32,7 @@ impl Engine {
         antialiasing: Option<Antialiasing>, // TODO: Initialize AA pipelines lazily
         shell: Shell,
     ) -> Self {
+        let backend = _adapter.get_info().backend;
         Self {
             format,
 
@@ -43,7 +46,6 @@ impl Engine {
 
             #[cfg(any(feature = "image", feature = "svg"))]
             image_pipeline: {
-                let backend = _adapter.get_info().backend;
 
                 crate::image::Pipeline::new(&device, format, backend)
             },
@@ -54,6 +56,7 @@ impl Engine {
 
             device,
             queue,
+            backend,
             _shell: shell,
         }
     }

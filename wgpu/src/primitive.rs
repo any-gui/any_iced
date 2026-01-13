@@ -68,10 +68,10 @@ pub trait Primitive: Debug + MaybeSend + MaybeSync + 'static {
 
     /// Returns `true` if this [`Primitive`] is an image primitive that needs cache.
     ///
-    /// If this returns `true`, `prepare_image_primitive` and `render_image_primitive`
+    /// If this returns `true`, `prepare_custom_primitive` and `render_image_primitive`
     /// will be called instead of the regular `prepare` and `render` methods.
     #[cfg(any(feature = "image", feature = "svg"))]
-    fn is_image_primitive(&self) -> bool {
+    fn is_custom_primitive(&self) -> bool {
         false
     }
 
@@ -79,7 +79,7 @@ pub trait Primitive: Debug + MaybeSend + MaybeSync + 'static {
     ///
     /// This is only called if `is_image_primitive()` returns `true`.
     #[cfg(any(feature = "image", feature = "svg"))]
-    fn prepare_image_primitive(
+    fn prepare_custom_primitive(
         &self,
         pipeline: &mut Self::Pipeline,
         device: &wgpu::Device,
@@ -89,6 +89,7 @@ pub trait Primitive: Debug + MaybeSend + MaybeSync + 'static {
         cache: &mut crate::image::Cache,
         encoder: &mut wgpu::CommandEncoder,
         belt: &mut wgpu::util::StagingBelt,
+        backend: wgpu::Backend
     ) {
         // 默认实现：调用普通的 prepare
         self.prepare(pipeline, device, queue, bounds, viewport);
@@ -98,7 +99,7 @@ pub trait Primitive: Debug + MaybeSend + MaybeSync + 'static {
     ///
     /// This is only called if `is_image_primitive()` returns `true`.
     #[cfg(any(feature = "image", feature = "svg"))]
-    fn render_image_primitive(
+    fn render_custom_primitive(
         &self,
         pipeline: &Self::Pipeline,
         encoder: &mut wgpu::CommandEncoder,
@@ -108,6 +109,30 @@ pub trait Primitive: Debug + MaybeSend + MaybeSync + 'static {
     ) {
         // 默认实现：调用普通的 render
         self.render(pipeline, encoder, target, clip_bounds);
+    }
+
+    #[cfg(any(feature = "image", feature = "svg"))]
+    fn render_custom_primitive_background(
+        &self,
+        pipeline: &Self::Pipeline,
+        encoder: &mut wgpu::CommandEncoder,
+        target: &wgpu::TextureView,
+        clip_bounds: &Rectangle<u32>,
+        _cache: &crate::image::Cache,
+    ) {
+
+    }
+
+    #[cfg(any(feature = "image", feature = "svg"))]
+    fn render_custom_primitive_foreground(
+        &self,
+        pipeline: &Self::Pipeline,
+        encoder: &mut wgpu::CommandEncoder,
+        target: &wgpu::TextureView,
+        clip_bounds: &Rectangle<u32>,
+        _cache: &crate::image::Cache,
+    ) {
+
     }
 }
 
@@ -159,12 +184,12 @@ pub(crate) trait Stored:
     );
 
     #[cfg(any(feature = "image", feature = "svg"))]
-    fn is_image_primitive(&self) -> bool {
+    fn is_custom_primitive(&self) -> bool {
         false
     }
 
     #[cfg(any(feature = "image", feature = "svg"))]
-    fn prepare_image_primitive(
+    fn prepare_custom_primitive(
         &self,
         storage: &mut Storage,
         device: &wgpu::Device,
@@ -175,10 +200,31 @@ pub(crate) trait Stored:
         cache: &mut crate::image::Cache,
         encoder: &mut wgpu::CommandEncoder,
         belt: &mut wgpu::util::StagingBelt,
+        backend: wgpu::Backend,
     );
 
     #[cfg(any(feature = "image", feature = "svg"))]
-    fn render_image_primitive(
+    fn render_custom_primitive(
+        &self,
+        storage: &Storage,
+        encoder: &mut wgpu::CommandEncoder,
+        target: &wgpu::TextureView,
+        clip_bounds: &Rectangle<u32>,
+        cache: &crate::image::Cache,
+    );
+
+    #[cfg(any(feature = "image", feature = "svg"))]
+    fn render_custom_primitive_background(
+        &self,
+        storage: &Storage,
+        encoder: &mut wgpu::CommandEncoder,
+        target: &wgpu::TextureView,
+        clip_bounds: &Rectangle<u32>,
+        cache: &crate::image::Cache,
+    );
+
+    #[cfg(any(feature = "image", feature = "svg"))]
+    fn render_custom_primitive_foreground(
         &self,
         storage: &Storage,
         encoder: &mut wgpu::CommandEncoder,
@@ -249,12 +295,12 @@ impl<P: Primitive> Stored for BlackBox<P> {
     }
 
     #[cfg(any(feature = "image", feature = "svg"))]
-    fn is_image_primitive(&self) -> bool {
-        self.primitive.is_image_primitive()
+    fn is_custom_primitive(&self) -> bool {
+        self.primitive.is_custom_primitive()
     }
 
     #[cfg(any(feature = "image", feature = "svg"))]
-    fn prepare_image_primitive(
+    fn prepare_custom_primitive(
         &self,
         storage: &mut Storage,
         device: &wgpu::Device,
@@ -265,6 +311,7 @@ impl<P: Primitive> Stored for BlackBox<P> {
         cache: &mut crate::image::Cache,
         encoder: &mut wgpu::CommandEncoder,
         belt: &mut wgpu::util::StagingBelt,
+        backend: wgpu::Backend
     ) {
         if !storage.has::<P>() {
             storage.store::<P, _>(P::Pipeline::new(device, queue, format));
@@ -276,7 +323,7 @@ impl<P: Primitive> Stored for BlackBox<P> {
             .downcast_mut::<P::Pipeline>()
             .expect("renderer should have the proper type");
 
-        self.primitive.prepare_image_primitive(
+        self.primitive.prepare_custom_primitive(
             renderer,
             device,
             queue,
@@ -285,11 +332,12 @@ impl<P: Primitive> Stored for BlackBox<P> {
             cache,
             encoder,
             belt,
+            backend
         );
     }
 
     #[cfg(any(feature = "image", feature = "svg"))]
-    fn render_image_primitive(
+    fn render_custom_primitive(
         &self,
         storage: &Storage,
         encoder: &mut wgpu::CommandEncoder,
@@ -306,7 +354,61 @@ impl<P: Primitive> Stored for BlackBox<P> {
         // 先尝试使用 draw 方法（在 render pass 中）
         // 如果 draw 返回 false，则使用 render 方法
         // 但这里我们需要 render pass，所以直接调用 render_image_primitive
-        self.primitive.render_image_primitive(
+        self.primitive.render_custom_primitive(
+            renderer,
+            encoder,
+            target,
+            clip_bounds,
+            cache,
+        );
+    }
+
+    #[cfg(any(feature = "image", feature = "svg"))]
+    fn render_custom_primitive_background(
+        &self,
+        storage: &Storage,
+        encoder: &mut wgpu::CommandEncoder,
+        target: &wgpu::TextureView,
+        clip_bounds: &Rectangle<u32>,
+        cache: &crate::image::Cache,
+    ) {
+        let renderer = storage
+            .get::<P>()
+            .expect("renderer should be initialized")
+            .downcast_ref::<P::Pipeline>()
+            .expect("renderer should have the proper type");
+
+        // 先尝试使用 draw 方法（在 render pass 中）
+        // 如果 draw 返回 false，则使用 render 方法
+        // 但这里我们需要 render pass，所以直接调用 render_image_primitive
+        self.primitive.render_custom_primitive_background(
+            renderer,
+            encoder,
+            target,
+            clip_bounds,
+            cache,
+        );
+    }
+
+    #[cfg(any(feature = "image", feature = "svg"))]
+    fn render_custom_primitive_foreground(
+        &self,
+        storage: &Storage,
+        encoder: &mut wgpu::CommandEncoder,
+        target: &wgpu::TextureView,
+        clip_bounds: &Rectangle<u32>,
+        cache: &crate::image::Cache,
+    ) {
+        let renderer = storage
+            .get::<P>()
+            .expect("renderer should be initialized")
+            .downcast_ref::<P::Pipeline>()
+            .expect("renderer should have the proper type");
+
+        // 先尝试使用 draw 方法（在 render pass 中）
+        // 如果 draw 返回 false，则使用 render 方法
+        // 但这里我们需要 render pass，所以直接调用 render_image_primitive
+        self.primitive.render_custom_primitive_foreground(
             renderer,
             encoder,
             target,

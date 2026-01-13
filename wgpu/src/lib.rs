@@ -372,8 +372,8 @@ impl Renderer {
                     #[cfg(any(feature = "image", feature = "svg"))]
                     {
                         // 检查是否是 image primitive
-                        if instance.primitive.is_image_primitive() {
-                            instance.primitive.prepare_image_primitive(
+                        if instance.primitive.is_custom_primitive() {
+                            instance.primitive.prepare_custom_primitive(
                                 &mut primitive_storage,
                                 &self.engine.device,
                                 &self.engine.queue,
@@ -383,6 +383,7 @@ impl Renderer {
                                 &mut image_cache,
                                 encoder,
                                 &mut self.staging_belt,
+                                self.engine.backend.clone(),
                             );
                             continue;
                         }
@@ -624,8 +625,8 @@ impl Renderer {
                         #[cfg(any(feature = "image", feature = "svg"))]
                         {
                             // 检查是否是 image primitive，如果是则调用 render_image_primitive
-                            if instance.primitive.is_image_primitive() {
-                                instance.primitive.render_image_primitive(
+                            if instance.primitive.is_custom_primitive() {
+                                instance.primitive.render_custom_primitive_background(
                                     &primitive_storage,
                                     encoder,
                                     frame,
@@ -692,6 +693,113 @@ impl Renderer {
                     scissor_rect,
                     &mut render_pass,
                 );
+                render_span.finish();
+            }
+
+            if !layer.primitives.is_empty() {
+                let render_span = debug::render(debug::Primitive::Shader);
+
+                let primitive_storage = self
+                    .engine
+                    .primitive_storage
+                    .read()
+                    .expect("Read primitive storage");
+
+                #[cfg(any(feature = "image", feature = "svg"))]
+                let image_cache = self.image_cache.borrow();
+
+                let mut need_render = Vec::new();
+
+                for instance in &layer.primitives {
+                    let bounds = instance.bounds * scale;
+
+                    if let Some(clip_bounds) = (instance.bounds * scale)
+                        .intersection(&physical_bounds)
+                        .and_then(Rectangle::snap)
+                    {
+                        render_pass.set_viewport(
+                            bounds.x,
+                            bounds.y,
+                            bounds.width,
+                            bounds.height,
+                            0.0,
+                            1.0,
+                        );
+
+                        render_pass.set_scissor_rect(
+                            clip_bounds.x,
+                            clip_bounds.y,
+                            clip_bounds.width,
+                            clip_bounds.height,
+                        );
+
+                        let drawn = instance
+                            .primitive
+                            .draw(&primitive_storage, &mut render_pass);
+
+                        if !drawn {
+                            need_render.push((instance, clip_bounds));
+                        }
+                    }
+                }
+
+                render_pass.set_viewport(
+                    0.0,
+                    0.0,
+                    viewport.physical_width() as f32,
+                    viewport.physical_height() as f32,
+                    0.0,
+                    1.0,
+                );
+
+                render_pass.set_scissor_rect(
+                    0,
+                    0,
+                    viewport.physical_width(),
+                    viewport.physical_height(),
+                );
+
+                if !need_render.is_empty() {
+                    let _ = ManuallyDrop::into_inner(render_pass);
+
+                    for (instance, clip_bounds) in need_render {
+                        #[cfg(any(feature = "image", feature = "svg"))]
+                        {
+                            // 检查是否是 image primitive，如果是则调用 render_image_primitive
+                            if instance.primitive.is_custom_primitive() {
+                                instance.primitive.render_custom_primitive_foreground(
+                                    &primitive_storage,
+                                    encoder,
+                                    frame,
+                                    &clip_bounds,
+                                    &image_cache,
+                                );
+                                continue;
+                            }
+                        }
+                    }
+
+                    render_pass = ManuallyDrop::new(encoder.begin_render_pass(
+                        &wgpu::RenderPassDescriptor {
+                            label: Some("iced_wgpu render pass"),
+                            color_attachments: &[Some(
+                                wgpu::RenderPassColorAttachment {
+                                    view: frame,
+                                    depth_slice: None,
+                                    resolve_target: None,
+                                    ops: wgpu::Operations {
+                                        load: wgpu::LoadOp::Load,
+                                        store: wgpu::StoreOp::Store,
+                                    },
+                                },
+                            )],
+                            depth_stencil_attachment: None,
+                            timestamp_writes: None,
+                            occlusion_query_set: None,
+                        },
+                    ));
+                }
+
                 render_span.finish();
             }
         }
