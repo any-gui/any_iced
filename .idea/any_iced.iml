@@ -76,6 +76,7 @@
       <sourceFolder url="file://$MODULE_DIR$/wgpu/src" isTestSource="false" />
       <sourceFolder url="file://$MODULE_DIR$/widget/src" isTestSource="false" />
       <sourceFolder url="file://$MODULE_DIR$/winit/src" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/examples/canvas/src" isTestSource="false" />
       <excludeFolder url="file://$MODULE_DIR$/target" />
     </content>
     <orderEntry type="inheritedJdk" />

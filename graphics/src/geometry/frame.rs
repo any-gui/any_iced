@@ -22,6 +22,24 @@ where
         Self::with_bounds(renderer, Rectangle::with_size(size))
     }
 
+    /// Creates a new [`Frame`] with the given clip bounds and optional clip path.
+    pub fn custom(
+        renderer: &Renderer,
+        bounds: Rectangle,
+        clip_path: Option<Path>,
+        use_coverage_aa: bool,
+        scale_factor: f32,
+    ) -> Self {
+        Self {
+            raw: renderer.custom(
+                bounds,
+                clip_path,
+                scale_factor,
+                use_coverage_aa,
+            ),
+        }
+    }
+
     /// Creates a new [`Frame`] with the given clip bounds.
     pub fn with_bounds(renderer: &Renderer, bounds: Rectangle) -> Self {
         Self {

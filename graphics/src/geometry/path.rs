@@ -17,7 +17,8 @@ use crate::core::{Point, Size};
 /// A single [`Path`] can represent different kinds of 2D shapes!
 #[derive(Debug, Clone)]
 pub struct Path {
-    raw: lyon_path::Path,
+    /// raw lyon path
+    pub raw: lyon_path::Path,
 }
 
 impl Path {

@@ -87,6 +87,9 @@ pub struct SolidVertex2D {
 
     /// The color of the vertex in __linear__ RGBA.
     pub color: color::Packed,
+
+    /// Coverage Used For AA
+    pub coverage: f32,
 }
 
 /// A vertex which contains 2D position & packed gradient data.
@@ -98,6 +101,9 @@ pub struct GradientVertex2D {
 
     /// The packed vertex data of the gradient.
     pub gradient: gradient::Packed,
+
+    /// Coverage Used For AA
+    pub coverage: f32,
 }
 
 /// The result of counting the attributes of a set of meshes.

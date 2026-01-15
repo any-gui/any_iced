@@ -6,6 +6,7 @@ struct GradientVertexInput {
     @location(4) @interpolate(flat) colors_4: vec4<u32>,
     @location(5) @interpolate(flat) offsets: vec4<u32>,
     @location(6) direction: vec4<f32>,
+    @location(7) coverage: f32,
 }
 
 struct GradientVertexOutput {
@@ -17,6 +18,7 @@ struct GradientVertexOutput {
     @location(4) @interpolate(flat) colors_4: vec4<u32>,
     @location(5) @interpolate(flat) offsets: vec4<u32>,
     @location(6) direction: vec4<f32>,
+    @location(7) coverage: f32,
 }
 
 @vertex
@@ -31,6 +33,7 @@ fn gradient_vs_main(input: GradientVertexInput) -> GradientVertexOutput {
     output.colors_4 = input.colors_4;
     output.offsets = input.offsets;
     output.direction = input.direction;
+    output.coverage = input.coverage;
 
     return output;
 }
@@ -118,8 +121,10 @@ fn gradient_fs_main(input: GradientVertexOutput) -> @location(0) vec4<f32> {
             break;
         }
     }
-
-    return gradient(input.raw_position, input.direction, colors, offsets, last_index);
+    let color = gradient(input.raw_position, input.direction, colors, offsets, last_index);
+    let alpha = color.a * input.coverage;
+    let rgb = color.rgb * input.coverage;
+    return vec4<f32>(rgb, alpha);
 }
 
 fn random(coords: vec2<f32>) -> f32 {

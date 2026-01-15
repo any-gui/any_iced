@@ -34,6 +34,7 @@ bitflags.workspace = true
 bytemuck.workspace = true
 futures.workspace = true
 glam.workspace = true
+clipper2.workspace = true
 cryoglyph.workspace = true
 guillotiere.workspace = true
 log.workspace = true

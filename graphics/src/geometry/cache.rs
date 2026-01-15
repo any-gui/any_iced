@@ -1,6 +1,6 @@
 use crate::cache::{self, Cached};
 use crate::core::{Rectangle, Size};
-use crate::geometry::{self, Frame};
+use crate::geometry::{self, Frame, Path};
 
 pub use cache::Group;
 
@@ -97,6 +97,52 @@ where
         };
 
         let mut frame = Frame::with_bounds(renderer, bounds);
+        draw_fn(&mut frame);
+
+        let geometry = frame.into_geometry().cache(self.raw.group(), previous);
+        let result = Cached::load(&geometry);
+
+        *state.borrow_mut() = cache::State::Filled {
+            current: Data { bounds, geometry },
+        };
+
+        result
+    }
+
+    /// Draws geometry using the provided closure and stores it in the
+    /// [`Cache`].
+    ///
+    /// Analogous to [`draw`](Self::draw), but takes a clipping [`Rectangle`] instead of
+    /// a [`Size`].
+    /// Config If Use Coverage AA
+    /// Config If Has A Clip Path
+    pub fn draw_with_custom_config(
+        &self,
+        renderer: &Renderer,
+        bounds: Rectangle,
+        draw_fn: impl FnOnce(&mut Frame<Renderer>),
+        use_coverage_aa: bool,
+        scale_factor: f32,
+        clip_path: Option<Path>,
+    ) -> Renderer::Geometry {
+        use std::ops::Deref;
+
+        let state = self.raw.state();
+
+        let previous = match state.borrow().deref() {
+            cache::State::Empty { previous } => {
+                previous.as_ref().map(|data| data.geometry.clone())
+            }
+            cache::State::Filled { current } => {
+                if current.bounds == bounds {
+                    return Cached::load(&current.geometry);
+                }
+
+                Some(current.geometry.clone())
+            }
+        };
+
+        let mut frame = Frame::custom(renderer, bounds,clip_path,use_coverage_aa,scale_factor);
         draw_fn(&mut frame);
 
         let geometry = frame.into_geometry().cache(self.raw.group(), previous);

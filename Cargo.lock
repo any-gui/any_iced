@@ -3,6 +3,13 @@
 version = 4
 
 [[package]]
+name = "CustomCanvas"
+version = "0.1.0"
+dependencies = [
+ "iced",
+]
+
+[[package]]
 name = "ab_glyph"
 version = "0.2.32"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -874,6 +881,27 @@ checksum = "4274ea815e013e0f9f04a2633423e14194e408a0576c943ce3d14ca56c50031c"
 dependencies = [
  "thiserror 1.0.69",
  "x11rb",
+]
+
+[[package]]
+name = "clipper2"
+version = "0.5.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "2e9c96871d5c50dd16c0f9df018f701fc62bd4f1b73cea8efe1985df6ab3d7e6"
+dependencies = [
+ "clipper2c-sys",
+ "libc",
+ "thiserror 2.0.17",
+]
+
+[[package]]
+name = "clipper2c-sys"
+version = "0.1.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "fc0fe1f9be1018d6be0fa3c79ab338d295fb0c0c501e4fe81bfdbe3a89a23098"
+dependencies = [
+ "cc",
+ "libc",
 ]
 
 [[package]]
@@ -2542,6 +2570,7 @@ version = "0.14.0-dev"
 dependencies = [
  "bitflags 2.10.0",
  "bytemuck",
+ "clipper2",
  "cryoglyph",
  "futures",
  "glam",

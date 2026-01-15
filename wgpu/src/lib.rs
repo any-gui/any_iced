@@ -63,7 +63,7 @@ pub use settings::Settings;
 
 #[cfg(feature = "geometry")]
 pub use geometry::Geometry;
-
+use iced_graphics::geometry::Path;
 use crate::core::renderer;
 use crate::core::{
     Background, Color, Font, Pixels, Point, Rectangle, Size, Transformation,
@@ -1005,6 +1005,10 @@ impl graphics::geometry::Renderer for Renderer {
 
     fn new_frame(&self, bounds: Rectangle) -> Self::Frame {
         geometry::Frame::new(bounds)
+    }
+
+    fn custom(&self, bounds: Rectangle, clip_path: Option<Path>, scale_factor: f32, use_coverage_aa: bool) -> Self::Frame {
+        crate::geometry::Frame::custom(bounds, clip_path, scale_factor, use_coverage_aa)
     }
 
     fn draw_geometry(&mut self, geometry: Self::Geometry) {

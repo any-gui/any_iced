@@ -801,6 +801,8 @@ mod solid {
                                     0 => Float32x2,
                                     // Color
                                     1 => Float32x4,
+                                    // Coverage
+                                    2 => Float32,
                                 ),
                             }],
                             compilation_options:
@@ -965,7 +967,9 @@ mod gradient {
                                 // Offsets
                                 5 => Uint32x4,
                                 // Direction
-                                6 => Float32x4
+                                6 => Float32x4,
+                                // Coverage
+                                7 => Float32,
                             ),
                         }],
                         compilation_options:

@@ -33,6 +33,18 @@ pub trait Renderer: core::Renderer {
     /// Creates a new [`Self::Frame`].
     fn new_frame(&self, bounds: Rectangle) -> Self::Frame;
 
+    /// Creates a new [`Self::Frame`] with an optional clip path.
+    ///
+    /// The clip path will be applied to all paths during tessellation
+    /// by performing a boolean intersection operation.
+    fn custom(
+        &self,
+        bounds: Rectangle,
+        clip_path: Option<Path>,
+        scale_factor: f32,
+        use_coverage_aa: bool,
+    ) -> Self::Frame;
+
     /// Draws the given [`Self::Geometry`].
     fn draw_geometry(&mut self, geometry: Self::Geometry);
 }
@@ -43,6 +55,9 @@ impl Renderer for () {
     type Frame = ();
 
     fn new_frame(&self, _bounds: Rectangle) -> Self::Frame {}
+
+    fn custom(&self, bounds: Rectangle, clip_path: Option<Path>, scale_factor: f32, use_coverage_aa: bool) -> Self::Frame {
+    }
 
     fn draw_geometry(&mut self, _geometry: Self::Geometry) {}
 }
