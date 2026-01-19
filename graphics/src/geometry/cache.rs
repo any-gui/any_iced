@@ -119,14 +119,14 @@ where
     pub fn draw_with_custom_config(
         &self,
         renderer: &Renderer,
-        bounds: Rectangle,
+        size: Size,
         draw_fn: impl FnOnce(&mut Frame<Renderer>),
         use_coverage_aa: bool,
         scale_factor: f32,
         clip_path: Option<Path>,
     ) -> Renderer::Geometry {
         use std::ops::Deref;
-
+        let bounds = Rectangle::with_size(size);
         let state = self.raw.state();
 
         let previous = match state.borrow().deref() {

@@ -30,6 +30,7 @@ use lyon::lyon_tessellation::{FillGeometryBuilder, StrokeGeometryBuilder};
 use lyon::tessellation::{FillTessellator, StrokeOptions, StrokeTessellator};
 use std::borrow::Cow;
 use std::sync::Arc;
+use crate::geometry::coverage_aa::CoverageMesh;
 
 #[derive(Debug)]
 pub enum Geometry {
@@ -161,63 +162,68 @@ impl Frame {
             stroke_tessellator: tessellation::StrokeTessellator::new(),
         }
     }
-}
 
-fn tessellate_coverage_fill(
-    coverage_path: CoverageFillPath,
-    meshes: &mut Vec<Mesh>,
-    fill_tessellator: &mut FillTessellator,
-    builder: &mut dyn FillGeometryBuilder,
-    transform: &Transform,
-) {
-    let rule = Rule::EvenOdd;
-    let CoverageFillPath {
-        fill_path,
-        style,
-        aa_mesh,
-    } = coverage_path;
-    let options = tessellation::FillOptions::default()
-        .with_fill_rule(into_fill_rule(rule));
+    fn tessellate_coverage_fill(
+        &mut self,
+        coverage_path: CoverageFillPath,
+        style: Style
+    ) {
+        let CoverageFillPath {
+            fill_path,
+            fill,
+            aa_mesh,
+        } = coverage_path;
+        {
+            let mut builder = self
+                .buffers
+                .get_fill(&self.transforms.current.transform_style(style.clone()));
+            let rule = Rule::EvenOdd;
+            let options = tessellation::FillOptions::default()
+                .with_fill_rule(into_fill_rule(rule));
 
-    if transform.is_identity() {
-        fill_tessellator.tessellate_path(fill_path.raw(), &options, builder)
-    } else {
-        let path = fill_path.transform(&transform.0);
+            if self.transforms.current.is_identity() {
+                self.fill_tessellator.tessellate_path(fill_path.raw(), &options, builder.as_mut())
+            } else {
+                let path = fill_path.transform(&self.transforms.current.0);
+                self.fill_tessellator.tessellate_path(path.raw(), &options, builder.as_mut())
+            }
+                .expect("Tessellate path.");
+        }
 
-        fill_tessellator.tessellate_path(fill_path.raw(), &options, builder)
+        //push vertexes and indexes to buffer
+        let buffer = self.buffers.get_mut(&style);
+        match (buffer, aa_mesh) {
+            (Buffer::Solid(s),CoverageMesh::Solid {
+                buffers
+            }) => {
+                // 获取当前 buffer 中已有的顶点数量作为 offset
+                let vertex_offset = s.vertices.len() as u32;
+
+                // 直接 extend vertices
+                s.vertices.extend(buffers.vertices);
+
+                // extend indices，需要加上 offset
+                s.indices.extend(
+                    buffers.indices.iter().map(|&idx| idx + vertex_offset)
+                );
+            }
+            (Buffer::Gradient(g),CoverageMesh::Gradient {
+                buffers
+            }) => {
+                // 获取当前 buffer 中已有的顶点数量作为 offset
+                let vertex_offset = g.vertices.len() as u32;
+
+                // 直接 extend vertices
+                g.vertices.extend(buffers.vertices);
+
+                // extend indices，需要加上 offset
+                g.indices.extend(
+                    buffers.indices.iter().map(|&idx| idx + vertex_offset)
+                );
+            }
+            _ => {unreachable!("tessellate_coverage_fill error")}
+        }
     }
-    .expect("Tessellate path.");
-
-    //push aa mesh to fill_tessellator
-    meshes.push(aa_mesh)
-}
-
-fn tessellate_coverage_stroke(
-    coverage_path: CoverageFillPath,
-    meshes: &mut Vec<Mesh>,
-    stroke_tessellator: &mut StrokeTessellator,
-    builder: &mut dyn StrokeGeometryBuilder,
-    transform: &Transform,
-    stroke_options: &StrokeOptions,
-) {
-    let rule = Rule::EvenOdd;
-    let CoverageFillPath {
-        fill_path,
-        style,
-        aa_mesh,
-    } = coverage_path;
-
-    if transform.is_identity() {
-        stroke_tessellator.tessellate_path(fill_path.raw(), stroke_options, builder)
-    } else {
-        let path = fill_path.transform(&transform.0);
-
-        stroke_tessellator.tessellate_path(path.raw(), stroke_options, builder)
-    }
-        .expect("Tessellate path.");
-
-    //push aa mesh to fill_tessellator
-    meshes.push(aa_mesh)
 }
 
 impl geometry::frame::Backend for Frame {
@@ -246,7 +252,6 @@ impl geometry::frame::Backend for Frame {
     fn fill(&mut self, path: &Path, fill: impl Into<Fill>) {
         let Fill { style, rule } = fill.into();
         let style = self.transforms.current.transform_style(style);
-        let mut buffer = self.buffers.get_fill(&style);
         //for coverage_aa
         if self.use_coverage_aa {
             let scale_factor = self.scale_factor;
@@ -260,15 +265,10 @@ impl geometry::frame::Backend for Frame {
                 .map(|c| c.to_coverage_fill_path(style, scale_factor))
                 .collect();
             for path in paths {
-                tessellate_coverage_fill(
-                    path,
-                    &mut self.meshes,
-                    &mut self.fill_tessellator,
-                    buffer.as_mut(),
-                    &mut self.transforms.current,
-                );
+                self.tessellate_coverage_fill(path,style);
             }
         } else {
+            let mut buffer = self.buffers.get_fill(&style);
             let options = tessellation::FillOptions::default()
                 .with_fill_rule(into_fill_rule(rule));
             if self.transforms.current.is_identity() {
@@ -303,10 +303,6 @@ impl geometry::frame::Backend for Frame {
             .0
             .transform_point(lyon::math::Point::new(top_left.x, top_left.y));
 
-        let mut buffer = self
-            .buffers
-            .get_fill(&self.transforms.current.transform_style(style));
-
         let size =
             self.transforms.current.0.transform_vector(
                 lyon::math::Vector::new(size.width, size.height),
@@ -330,16 +326,12 @@ impl geometry::frame::Backend for Frame {
                 .collect();
 
             for path in paths {
-                tessellate_coverage_fill(
-                    path,
-                    &mut self.meshes,
-                    &mut self.fill_tessellator,
-                    buffer.as_mut(),
-                    &mut self.transforms.current,
-                );
+                self.tessellate_coverage_fill(path,style);
             }
         } else {
-
+            let mut buffer = self
+                .buffers
+                .get_fill(&self.transforms.current.transform_style(style));
             let options = tessellation::FillOptions::default()
                 .with_fill_rule(into_fill_rule(rule));
 
@@ -355,10 +347,6 @@ impl geometry::frame::Backend for Frame {
 
     fn stroke<'a>(&mut self, path: &Path, stroke: impl Into<Stroke<'a>>) {
         let stroke = stroke.into();
-
-        let mut buffer = self
-            .buffers
-            .get_stroke(&self.transforms.current.transform_style(stroke.style));
 
         let mut options = tessellation::StrokeOptions::default();
         options.line_width = stroke.width;
@@ -382,20 +370,16 @@ impl geometry::frame::Backend for Frame {
             }
             let paths: Vec<CoverageFillPath> = coverage_courter
                 .into_iter()
-                .map(|c| c.to_coverage_fill_path(stroke.style, scale_factor))
+                .map(|c| c.to_coverage_stroke_path(&stroke, scale_factor))
                 .collect();
 
             for path in paths {
-                tessellate_coverage_stroke(
-                    path,
-                    &mut self.meshes,
-                    &mut self.stroke_tessellator,
-                    buffer.as_mut(),
-                    &mut self.transforms.current,
-                    &options
-                );
+                self.tessellate_coverage_fill(path,stroke.style);
             }
         } else {
+            let mut buffer = self
+                .buffers
+                .get_stroke(&self.transforms.current.transform_style(stroke.style));
             if self.transforms.current.is_identity() {
                 self.stroke_tessellator.tessellate_path(
                     path.raw(),
@@ -423,10 +407,6 @@ impl geometry::frame::Backend for Frame {
     ) {
         let stroke = stroke.into();
 
-        let mut buffer = self
-            .buffers
-            .get_stroke(&self.transforms.current.transform_style(stroke.style));
-
         let top_left = self
             .transforms
             .current
@@ -437,12 +417,6 @@ impl geometry::frame::Backend for Frame {
             self.transforms.current.0.transform_vector(
                 lyon::math::Vector::new(size.width, size.height),
             );
-
-        let mut options = tessellation::StrokeOptions::default();
-        options.line_width = stroke.width;
-        options.start_cap = into_line_cap(stroke.line_cap);
-        options.end_cap = into_line_cap(stroke.line_cap);
-        options.line_join = into_line_join(stroke.line_join);
 
         if self.use_coverage_aa {
             let scale_factor = self.scale_factor;
@@ -457,20 +431,23 @@ impl geometry::frame::Backend for Frame {
             }
             let paths: Vec<CoverageFillPath> = coverage_courter
                 .into_iter()
-                .map(|c| c.to_coverage_fill_path(stroke.style, scale_factor))
+                .map(|c| c.to_coverage_stroke_path(&stroke, scale_factor))
                 .collect();
 
             for path in paths {
-                tessellate_coverage_stroke(
-                    path,
-                    &mut self.meshes,
-                    &mut self.stroke_tessellator,
-                    buffer.as_mut(),
-                    &mut self.transforms.current,
-                    &options
-                );
+                self.tessellate_coverage_fill(path,stroke.style);
             }
         } else {
+            let mut buffer = self
+                .buffers
+                .get_stroke(&self.transforms.current.transform_style(stroke.style));
+
+            let mut options = tessellation::StrokeOptions::default();
+            options.line_width = stroke.width;
+            options.start_cap = into_line_cap(stroke.line_cap);
+            options.end_cap = into_line_cap(stroke.line_cap);
+            options.line_join = into_line_join(stroke.line_join);
+
             self.stroke_tessellator
                 .tessellate_rectangle(
                     &lyon::math::Box2D::new(top_left, top_left + size),
@@ -853,7 +830,7 @@ impl tessellation::FillVertexConstructor<mesh::GradientVertex2D>
         mesh::GradientVertex2D {
             position: [position.x, position.y],
             gradient: self.gradient,
-            coverage: 1.0,
+            coverage: 1.0
         }
     }
 }
@@ -870,7 +847,7 @@ impl tessellation::StrokeVertexConstructor<mesh::GradientVertex2D>
         mesh::GradientVertex2D {
             position: [position.x, position.y],
             gradient: self.gradient,
-            coverage: 1.0,
+            coverage: 1.0
         }
     }
 }
@@ -889,7 +866,7 @@ impl tessellation::FillVertexConstructor<mesh::SolidVertex2D>
         mesh::SolidVertex2D {
             position: [position.x, position.y],
             color: self.0,
-            coverage: 1.0,
+            coverage: 1.0
         }
     }
 }
@@ -906,7 +883,7 @@ impl tessellation::StrokeVertexConstructor<mesh::SolidVertex2D>
         mesh::SolidVertex2D {
             position: [position.x, position.y],
             color: self.0,
-            coverage: 1.0,
+            coverage: 1.0
         }
     }
 }

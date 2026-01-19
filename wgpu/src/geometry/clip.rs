@@ -1,10 +1,11 @@
 use iced_graphics::geometry::{Fill, LineCap, LineJoin, Stroke};
 use iced_graphics::geometry::fill::Rule;
 use iced_graphics::Mesh;
-use clipper2::{EndType, FillRule, JoinType, Path, Paths, Point as ClipPoint};
+use clipper2::{Bounds, EndType, FillRule, JoinType, Path, Paths, Point as ClipPoint};
 use lyon::math::Point as LyonPoint;
 use lyon::path::Path as LyonPath;
-use crate::geometry::coverage_aa::{build_aa_mesh, AA_FEATHER_ONE_SIDE};
+use crate::core::Rectangle;
+use crate::geometry::coverage_aa::{build_aa_mesh, CoverageMesh, AA_FEATHER_ONE_SIDE};
 
 const MITER_LIMIT: f64 = 4.0;
 const SIMPLIFY_EPSILON: f64 = 0.05;
@@ -45,12 +46,20 @@ impl ClipContourPoint {
     pub fn atan2(self) -> f32 {
         self.y.atan2(self.x)
     }
+
+    #[inline]
+    pub fn neg(self) -> Self {
+        Self {
+            x: -self.x,
+            y: -self.y,
+        }
+    }
 }
 
 pub struct CoverageFillPath {
     pub fill_path: iced_graphics::geometry::Path,
-    pub style: iced_graphics::geometry::fill::Style,
-    pub aa_mesh: Mesh,
+    pub fill: Fill,
+    pub aa_mesh: CoverageMesh,
 }
 
 pub struct ClipContour {
@@ -101,12 +110,19 @@ impl ClipContour {
 
         CoverageFillPath {
             fill_path: build_lyon_path_from_paths(stroke.clone(), closed),
-            style,
+            fill: Fill {
+                style,
+                rule: Rule::EvenOdd,
+            },
             aa_mesh: build_aa_mesh(stroke, style, scale_factor),
         }
     }
 
-    pub fn to_coverage_fill_path(self, style: iced_graphics::geometry::fill::Style, scale_factor: f32) -> CoverageFillPath {
+    pub fn to_coverage_fill_path(
+        self,
+        style: iced_graphics::geometry::fill::Style,
+        scale_factor: f32,
+    ) -> CoverageFillPath {
         let Self { points, closed } = self;
         let mut path: Vec<ClipPoint> = points
             .into_iter()
@@ -127,7 +143,10 @@ impl ClipContour {
 
         CoverageFillPath {
             fill_path: build_lyon_path_from_paths(fill_paths.clone(), closed),
-            style,
+            fill: Fill {
+                style,
+                rule: Rule::EvenOdd,
+            },
             aa_mesh: build_aa_mesh(fill_paths, style, scale_factor),
         }
     }
@@ -136,7 +155,6 @@ impl ClipContour {
 pub fn clip_by_path(
     contours: Vec<ClipContour>,
     clip_path: Vec<ClipContour>,
-    
 ) -> Vec<ClipContour> {
     let mut results: Vec<ClipContour> = vec![];
     let clip_paths: Vec<Path> = clip_path.into_iter().map(|c|contour_to_clip_path(c)).collect();
@@ -144,7 +162,7 @@ pub fn clip_by_path(
     for contour in contours {
         let closed = contour.closed;
         let cp = contour_to_clip_path(contour);
-        let clipped = union(&Paths::new(vec![cp]), clip_paths.clone());
+        let clipped = intersect(&Paths::new(vec![cp]), clip_paths.clone());
         results.extend(clip_path_to_contour(clipped, closed));
     }
     results
@@ -192,11 +210,11 @@ fn diff(subject: &Paths, clip: Paths) -> Paths {
         .expect("clipper difference failed")
 }
 
-fn union(subject: &Paths, clip: Paths) -> Paths {
+fn intersect(subject: &Paths, clip: Paths) -> Paths {
     subject
         .to_clipper_subject()
         .add_clip(clip)
-        .union(FillRule::NonZero)
+        .intersect(FillRule::NonZero)
         .expect("clipper difference failed")
 }
 

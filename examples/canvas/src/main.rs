@@ -1,4 +1,4 @@
-use iced::mouse;
+use iced::{mouse, Settings};
 use iced::widget::canvas::{
     self, Cache, Canvas, Geometry, Path, Stroke, stroke,
 };
@@ -14,6 +14,10 @@ pub fn main() -> iced::Result {
         .subscription(CustomCanvas::subscription)
         .title(CustomCanvas::title)
         .theme(Theme::Dark)
+        .settings(Settings {
+            antialiasing: false,
+            ..Settings::default()
+        })
         .run()
 }
 
@@ -93,35 +97,50 @@ impl<Message> canvas::Program<Message> for CustomCanvas {
         bounds: Rectangle,
         _cursor: mouse::Cursor,
     ) -> Vec<Geometry> {
-        let geometry = self.cache.draw_with_bounds(
-            renderer,
-            bounds,
-            |frame| {
-                // 150x150 的圆角矩形，居中在 200x200 的 canvas 中
-                // top_left = (200 - 150) / 2 = 25
-                let rect_size = Size::new(150.0, 150.0);
-                let top_left = Point::new(25.0, 25.0);
-
-                // 圆角半径（可以根据需要调整）
-                let radius = border::Radius::from(10.0);
-
-                // 创建圆角矩形路径
-                let rounded_rect = Path::rounded_rectangle(top_left, rect_size, radius);
-
-                // 填充灰白色
-                let fill_color = Color::from_rgb(0.4, 0.4, 0.4);
-                frame.fill(&rounded_rect, fill_color);
-
-                // 绘制 4px 白色边框
-                frame.stroke(
-                    &rounded_rect,
-                    Stroke {
-                        style: stroke::Style::Solid(Color::WHITE),
-                        width: 4.0,
-                        ..Stroke::default()
-                    },
-                );
+        if let Some(scale_factor) = self.scale_factor {
+            //let clip_path = Path::circle(Point::new(100.0, 55.0), 50.);
+            let clip_path = Path::new(|builder| {
+                builder.move_to(Point::new(100.,10.));
+                builder.line_to(Point::new(190., 100.));
+                builder.line_to(Point::new(10., 100.));
+                builder.close();
             });
-        vec![geometry]
+            let geometry = self.cache.draw_with_custom_config(
+                renderer,
+                bounds.size(),
+                |frame| {
+                    // 150x150 的圆角矩形，居中在 200x200 的 canvas 中
+                    // top_left = (200 - 150) / 2 = 25
+                    let rect_size = Size::new(150.0, 150.0);
+                    let top_left = Point::new(25.0, 25.0);
+
+                    // 圆角半径（可以根据需要调整）
+                    let radius = border::Radius::from(10.0);
+
+                    // 创建圆角矩形路径
+                    let rounded_rect = Path::rounded_rectangle(top_left, rect_size, radius);
+
+                    // 填充灰白色
+                    let fill_color = Color::from_rgb(0.4, 0.4, 0.4);
+                    frame.fill(&rounded_rect, fill_color);
+
+                    // 绘制 4px 白色边框
+                    frame.stroke(
+                        &rounded_rect,
+                        Stroke {
+                            style: stroke::Style::Solid(Color::WHITE),
+                            width: 4.0,
+                            ..Stroke::default()
+                        },
+                    );
+                },
+                true,
+                scale_factor,
+                Some(clip_path),
+            );
+            vec![geometry]
+        } else {
+            vec![]
+        }
     }
 }
