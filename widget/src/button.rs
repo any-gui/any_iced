@@ -405,6 +405,7 @@ where
             &renderer::Style {
                 text_color: style.text_color,
                 opacity: _style.opacity,
+                scale_factor_for_aa: _style.scale_factor_for_aa,
             },
             content_layout,
             cursor,

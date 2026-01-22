@@ -972,7 +972,8 @@ async fn run_instance<P>(
                             window.state.theme(),
                             &renderer::Style {
                                 text_color: window.state.text_color(),
-                                opacity: 1.
+                                opacity: 1.,
+                                scale_factor_for_aa: window.raw.scale_factor() as f32
                             },
                             cursor,
                         );

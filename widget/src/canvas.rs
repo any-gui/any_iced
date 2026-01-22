@@ -301,7 +301,7 @@ where
             Vector::new(bounds.x, bounds.y),
             |renderer| {
                 let layers =
-                    self.program.draw(state, renderer, theme, bounds, cursor);
+                    self.program.draw(state, renderer, theme,_style, bounds, cursor);
 
                 for layer in layers {
                     renderer.draw_geometry(layer);

@@ -108,6 +108,8 @@ pub struct Style {
     pub text_color: Color,
     /// The Opacity of Widget
     pub opacity: f32,
+    /// The Anti-aliased Pixel Width
+    pub scale_factor_for_aa: f32,
 }
 
 impl Default for Style {
@@ -115,6 +117,7 @@ impl Default for Style {
         Style {
             text_color: Color::BLACK,
             opacity: 1.,
+            scale_factor_for_aa: 1.0,
         }
     }
 }

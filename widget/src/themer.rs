@@ -161,6 +161,7 @@ where
             renderer::Style {
                 text_color: text_color(theme),
                 opacity: style.opacity,
+                scale_factor_for_aa: 0.0,
             }
         } else {
             *style

@@ -536,6 +536,7 @@ pub use crate::core::{
     Function, Gradient, Length, Padding, Pixels, Point, Radians, Rectangle,
     Rotation, Settings, Shadow, Size, Theme, Transformation, Vector, never,
 };
+pub use crate::renderer::core::renderer::Style as RendererStyle;
 pub use crate::program::Preset;
 pub use crate::program::message;
 pub use crate::runtime::exit;

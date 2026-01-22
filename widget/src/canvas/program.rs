@@ -1,7 +1,7 @@
 use crate::Action;
 use crate::canvas::mouse;
 use crate::canvas::{Event, Geometry};
-use crate::core::Rectangle;
+use crate::core::{renderer, Rectangle};
 use crate::graphics::geometry;
 
 /// The state and logic of a [`Canvas`].
@@ -52,6 +52,7 @@ where
         state: &Self::State,
         renderer: &Renderer,
         theme: &Theme,
+        renderer_style: &renderer::Style,
         bounds: Rectangle,
         cursor: mouse::Cursor,
     ) -> Vec<Geometry<Renderer>>;
@@ -94,10 +95,11 @@ where
         state: &Self::State,
         renderer: &Renderer,
         theme: &Theme,
+        renderer_style: &renderer::Style,
         bounds: Rectangle,
         cursor: mouse::Cursor,
     ) -> Vec<Geometry<Renderer>> {
-        T::draw(self, state, renderer, theme, bounds, cursor)
+        T::draw(self, state, renderer, theme,renderer_style, bounds, cursor)
     }
 
     fn mouse_interaction(

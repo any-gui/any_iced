@@ -162,7 +162,8 @@ where
 
         let inherited_style = renderer::Style {
             text_color: style.text_color.unwrap_or(inherited_style.text_color),
-            opacity: 1.,
+            opacity: inherited_style.opacity,
+            scale_factor_for_aa: inherited_style.scale_factor_for_aa,
         };
 
         container::draw_background(renderer, &style, bounds);

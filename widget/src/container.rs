@@ -360,6 +360,7 @@ where
                         .text_color
                         .unwrap_or(renderer_style.text_color),
                     opacity: renderer_style.opacity,
+                    scale_factor_for_aa: renderer_style.scale_factor_for_aa,
                 },
                 layout.children().next().unwrap(),
                 cursor,
