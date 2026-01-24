@@ -888,7 +888,7 @@ impl tessellation::StrokeVertexConstructor<mesh::SolidVertex2D>
     }
 }
 
-fn into_line_join(line_join: LineJoin) -> lyon::tessellation::LineJoin {
+pub fn into_line_join(line_join: LineJoin) -> lyon::tessellation::LineJoin {
     match line_join {
         LineJoin::Miter => lyon::tessellation::LineJoin::Miter,
         LineJoin::Round => lyon::tessellation::LineJoin::Round,
@@ -896,7 +896,7 @@ fn into_line_join(line_join: LineJoin) -> lyon::tessellation::LineJoin {
     }
 }
 
-fn into_line_cap(line_cap: LineCap) -> lyon::tessellation::LineCap {
+pub fn into_line_cap(line_cap: LineCap) -> lyon::tessellation::LineCap {
     match line_cap {
         LineCap::Butt => lyon::tessellation::LineCap::Butt,
         LineCap::Square => lyon::tessellation::LineCap::Square,
@@ -904,7 +904,7 @@ fn into_line_cap(line_cap: LineCap) -> lyon::tessellation::LineCap {
     }
 }
 
-fn into_fill_rule(rule: fill::Rule) -> lyon::tessellation::FillRule {
+pub fn into_fill_rule(rule: fill::Rule) -> lyon::tessellation::FillRule {
     match rule {
         fill::Rule::NonZero => lyon::tessellation::FillRule::NonZero,
         fill::Rule::EvenOdd => lyon::tessellation::FillRule::EvenOdd,

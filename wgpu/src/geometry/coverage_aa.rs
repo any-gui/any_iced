@@ -1,5 +1,5 @@
 use clipper2::{Paths};
-use iced_graphics::{color, Mesh};
+use iced_graphics::{color};
 use iced_graphics::geometry::{Style};
 use crate::geometry::clip::{signed_area, ClipContourPoint};
 use clipper2::{Point as ClipPoint};
