@@ -19,6 +19,10 @@ use crate::core::{Point, Size};
 pub struct Path {
     /// raw lyon path
     pub raw: lyon_path::Path,
+    /// Offset About Clip Path In Frame
+    pub clip_offset: Option<f32>,
+    /// Diff With Path: Subtract Operation
+    pub diff_path: Option<lyon_path::Path>
 }
 
 impl Path {
@@ -32,6 +36,18 @@ impl Path {
         f(&mut builder);
 
         builder.build()
+    }
+
+    /// add clip offset
+    pub fn with_clip_offset(mut self, clip_offset: f32) -> Self {
+        self.clip_offset = Some(clip_offset);
+        self
+    }
+
+    /// add clip offset
+    pub fn with_diff_path(mut self, path: lyon_path::Path) -> Self {
+        self.diff_path = Some(path);
+        self
     }
 
     /// Creates a new [`Path`] representing a line segment given its starting
@@ -74,11 +90,18 @@ impl Path {
         &self.raw
     }
 
+    /// To lyon Path
+    pub fn to_raw(self) -> lyon_path::Path {
+        self.raw
+    }
+
     /// Returns the current [`Path`] with the given transform applied to it.
     #[inline]
     pub fn transform(&self, transform: &lyon_path::math::Transform) -> Path {
         Path {
             raw: self.raw.clone().transformed(transform),
+            clip_offset: None,
+            diff_path: None,
         }
     }
 }

@@ -3,6 +3,7 @@
 pub mod clip;
 pub mod coverage_aa;
 pub mod flat;
+mod dashed;
 
 use crate::core::text::LineHeight;
 use crate::core::{
@@ -23,7 +24,7 @@ use crate::triangle;
 use lyon::geom::euclid;
 use lyon::tessellation;
 
-use crate::geometry::clip::{clip_by_path, CoverageFillPath};
+use crate::geometry::clip::{clip_by_path, ClipContour, CoverageFillPath};
 use crate::geometry::flat::geometry_path_flatten;
 use iced_graphics::geometry::fill::Rule;
 use lyon::lyon_tessellation::{FillGeometryBuilder, StrokeGeometryBuilder};
@@ -31,6 +32,7 @@ use lyon::tessellation::{FillTessellator, StrokeOptions, StrokeTessellator};
 use std::borrow::Cow;
 use std::sync::Arc;
 use crate::geometry::coverage_aa::CoverageMesh;
+use crate::geometry::dashed::dashed_path;
 
 #[derive(Debug)]
 pub enum Geometry {
@@ -105,7 +107,7 @@ impl Cached for Geometry {
 /// A frame for drawing some geometry.
 pub struct Frame {
     clip_bounds: Rectangle,
-    clip_path: Option<Path>,
+    clip_path: Option<Vec<ClipContour>>,
     buffers: BufferStack,
     meshes: Vec<Mesh>,
     images: Vec<Image>,
@@ -145,6 +147,9 @@ impl Frame {
         scale_factor: f32,
         use_coverage_aa: bool,
     ) -> Frame {
+        let clip_path = clip_path.map(|path| {
+            geometry_path_flatten(&path)
+        });
         Frame {
             clip_bounds: bounds,
             clip_path,  // ✅ 设置 clip path
@@ -256,10 +261,6 @@ impl geometry::frame::Backend for Frame {
         if self.use_coverage_aa {
             let scale_factor = self.scale_factor;
             let mut coverage_courter = geometry_path_flatten(path);
-            if let Some(cp) = &self.clip_path {
-                let flat_cp = geometry_path_flatten(cp);
-                coverage_courter = clip_by_path(coverage_courter, flat_cp);
-            }
             let paths: Vec<CoverageFillPath> = coverage_courter
                 .into_iter()
                 .map(|c| c.to_coverage_fill_path(style, scale_factor))
@@ -316,10 +317,6 @@ impl geometry::frame::Backend for Frame {
             );
 
             let mut coverage_courter = geometry_path_flatten(&path);
-            if let Some(cp) = &self.clip_path {
-                let flat_cp = geometry_path_flatten(cp);
-                coverage_courter = clip_by_path(coverage_courter, flat_cp);
-            }
             let paths: Vec<CoverageFillPath> = coverage_courter
                 .into_iter()
                 .map(|c| c.to_coverage_fill_path(style, scale_factor))
@@ -357,20 +354,16 @@ impl geometry::frame::Backend for Frame {
         let path = if stroke.line_dash.segments.is_empty() {
             Cow::Borrowed(path)
         } else {
-            Cow::Owned(dashed(path, stroke.line_dash))
+            Cow::Owned(dashed_path(path, stroke.line_dash))
         };
 
         //if coverage aa
         if self.use_coverage_aa {
             let scale_factor = self.scale_factor;
             let mut coverage_courter = geometry_path_flatten(&path);
-            if let Some(cp) = &self.clip_path {
-                let flat_cp = geometry_path_flatten(cp);
-                coverage_courter = clip_by_path(coverage_courter, flat_cp);
-            }
             let paths: Vec<CoverageFillPath> = coverage_courter
                 .into_iter()
-                .map(|c| c.to_coverage_stroke_path(&stroke, scale_factor))
+                .map(|c| c.to_coverage_stroke_path(&stroke, scale_factor,&self.clip_path, path.clip_offset, &path.diff_path))
                 .collect();
 
             for path in paths {
@@ -425,13 +418,9 @@ impl geometry::frame::Backend for Frame {
                 Size::new(size.x,size.y),
             );
             let mut coverage_courter = geometry_path_flatten(&path);
-            if let Some(cp) = &self.clip_path {
-                let flat_cp = geometry_path_flatten(cp);
-                coverage_courter = clip_by_path(coverage_courter, flat_cp);
-            }
             let paths: Vec<CoverageFillPath> = coverage_courter
                 .into_iter()
-                .map(|c| c.to_coverage_stroke_path(&stroke, scale_factor))
+                .map(|c| c.to_coverage_stroke_path(&stroke, scale_factor,&self.clip_path, path.clip_offset, &path.diff_path))
                 .collect();
 
             for path in paths {

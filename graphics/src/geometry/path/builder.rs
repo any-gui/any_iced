@@ -254,6 +254,8 @@ impl Builder {
     pub fn build(self) -> Path {
         Path {
             raw: self.raw.build(),
+            clip_offset: None,
+            diff_path: None,
         }
     }
 }

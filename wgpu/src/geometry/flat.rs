@@ -6,12 +6,16 @@ use crate::geometry::clip::{ClipContour, ClipContourPoint};
 const FLAT_TOLERANCE: f32 = 0.05;
 
 pub fn geometry_path_flatten(path: &Path) -> Vec<ClipContour> {
+    lyon_path_flatten(path.raw())
+}
+
+pub fn lyon_path_flatten(path: &lyon::path::Path) -> Vec<ClipContour> {
     let mut contours: Vec<ClipContour> = Vec::new();
 
     let mut current_points: Vec<ClipContourPoint> = Vec::new();
     let mut current_closed: bool = false;
 
-    for event in path.raw().iter().flattened(FLAT_TOLERANCE) {
+    for event in path.iter().flattened(FLAT_TOLERANCE) {
         match event {
             Event::Begin { at } => {
                 // 开始一个新的 sub-path

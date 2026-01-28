@@ -1,7 +1,5 @@
 use iced::{mouse, RendererStyle, Settings};
-use iced::widget::canvas::{
-    self, Cache, Canvas, Geometry, Path, Stroke, stroke,
-};
+use iced::widget::canvas::{self, Cache, Canvas, Geometry, Path, Stroke, stroke, LineDash};
 use iced::widget::center;
 use iced::window;
 use iced::{
@@ -113,6 +111,12 @@ impl<Message> canvas::Program<Message> for CustomCanvas {
             builder.line_to(Point::new(10., 100.));
             builder.close();
         });
+        let border_path = Path::new(|builder| {
+            builder.move_to(Point::new(100.,10.));
+            builder.line_to(Point::new(190., 100.));
+            builder.line_to(Point::new(10., 100.));
+            builder.close();
+        });
         let geometry = self.cache.draw_with_custom_config(
             renderer,
             bounds.size(),
@@ -120,25 +124,45 @@ impl<Message> canvas::Program<Message> for CustomCanvas {
                 // 150x150 的圆角矩形，居中在 200x200 的 canvas 中
                 // top_left = (200 - 150) / 2 = 25
                 let rect_size = Size::new(150.0, 150.0);
+
                 let top_left = Point::new(25.0, 25.0);
 
+                let diff_rect_size = Size::new(156.0, 154.0);
+                let diff_top_left = Point::new(23.0, 25.0);
+
                 // 圆角半径（可以根据需要调整）
-                let radius = border::Radius::from(10.0);
+                let radius = border::Radius::from(30.0);
+                let diff_radius = border::Radius::from(34.0);
+
+                let diff = Path::rounded_rectangle(diff_top_left, diff_rect_size, diff_radius);
+
 
                 // 创建圆角矩形路径
-                let rounded_rect = Path::rounded_rectangle(top_left, rect_size, radius);
-
+                let rounded_rect = Path::rounded_rectangle(top_left, rect_size, radius).with_diff_path(
+                    diff.to_raw()
+                );
+                //let rounded_rect = Path::rounded_rectangle(top_left, rect_size, radius);
+                let fill_color = Color::from_rgb(0.4, 0.8, 0.4);
+                //frame.fill(&diff, fill_color);
                 // 填充灰白色
-                let fill_color = Color::from_rgb(0.4, 0.4, 0.4);
-                frame.fill(&rounded_rect, fill_color);
+                //let fill_color = Color::from_rgb(0.4, 0.4, 0.4);
+                //frame.fill(&rounded_rect, fill_color);
 
                 // 绘制 4px 白色边框
+                // line_dash: LineDash {
+                //     segments: &[20.,20.],
+                //     offset: 0,
+                // },
                 frame.stroke(
                     &rounded_rect,
                     Stroke {
-                        style: stroke::Style::Solid(Color::WHITE),
-                        width: 4.0,
-                        ..Stroke::default()
+                        style: stroke::Style::Solid(Color::WHITE.scale_alpha(1.)),
+                        width: 8.0,
+                        line_dash: LineDash {
+                            segments: &[10.,10.],
+                            offset: 0,
+                        },
+                        ..Default::default()
                     },
                 );
             },
