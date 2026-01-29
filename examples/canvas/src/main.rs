@@ -136,7 +136,6 @@ impl<Message> canvas::Program<Message> for CustomCanvas {
 
                 let diff = Path::rounded_rectangle(diff_top_left, diff_rect_size, diff_radius);
 
-
                 // 创建圆角矩形路径
                 let rounded_rect = Path::rounded_rectangle(top_left, rect_size, radius).with_diff_path(
                     diff.to_raw()
@@ -168,7 +167,6 @@ impl<Message> canvas::Program<Message> for CustomCanvas {
             },
             true,
             _style.scale_factor_for_aa,
-            Some(clip_path),
         );
         vec![geometry]
     }

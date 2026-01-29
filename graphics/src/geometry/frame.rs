@@ -26,14 +26,12 @@ where
     pub fn custom(
         renderer: &Renderer,
         bounds: Rectangle,
-        clip_path: Option<Path>,
         use_coverage_aa: bool,
         scale_factor: f32,
     ) -> Self {
         Self {
             raw: renderer.custom(
                 bounds,
-                clip_path,
                 scale_factor,
                 use_coverage_aa,
             ),

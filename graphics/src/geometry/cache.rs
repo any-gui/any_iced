@@ -123,7 +123,6 @@ where
         draw_fn: impl FnOnce(&mut Frame<Renderer>),
         use_coverage_aa: bool,
         scale_factor: f32,
-        clip_path: Option<Path>,
     ) -> Renderer::Geometry {
         use std::ops::Deref;
         let bounds = Rectangle::with_size(size);
@@ -142,7 +141,7 @@ where
             }
         };
 
-        let mut frame = Frame::custom(renderer, bounds,clip_path,use_coverage_aa,scale_factor);
+        let mut frame = Frame::custom(renderer, bounds,use_coverage_aa,scale_factor);
         draw_fn(&mut frame);
 
         let geometry = frame.into_geometry().cache(self.raw.group(), previous);

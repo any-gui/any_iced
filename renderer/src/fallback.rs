@@ -480,13 +480,12 @@ mod geometry {
         fn custom(
             &self,
             bounds: Rectangle,
-            clip_path: Option<Path>,
             scale_factor: f32,
             use_coverage_aa: bool
         ) -> Self::Frame {
             match self {
                 Self::Primary(renderer) => {
-                    Frame::Primary(renderer.custom(bounds,clip_path,scale_factor,use_coverage_aa))
+                    Frame::Primary(renderer.custom(bounds,scale_factor,use_coverage_aa))
                 }
                 Self::Secondary(renderer) => {
                     Frame::Secondary(renderer.new_frame(bounds))

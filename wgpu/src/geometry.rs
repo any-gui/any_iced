@@ -107,7 +107,6 @@ impl Cached for Geometry {
 /// A frame for drawing some geometry.
 pub struct Frame {
     clip_bounds: Rectangle,
-    clip_path: Option<Vec<ClipContour>>,
     buffers: BufferStack,
     meshes: Vec<Mesh>,
     images: Vec<Image>,
@@ -124,7 +123,6 @@ impl Frame {
     pub fn new(bounds: Rectangle) -> Frame {
         Frame {
             clip_bounds: bounds,
-            clip_path: None,
             buffers: BufferStack::new(),
             meshes: Vec::new(),
             images: Vec::new(),
@@ -143,16 +141,11 @@ impl Frame {
     /// Creates a new [`Frame`] with the given clip bounds and optional clip path.
     pub fn custom(
         bounds: Rectangle,
-        clip_path: Option<Path>,
         scale_factor: f32,
         use_coverage_aa: bool,
     ) -> Frame {
-        let clip_path = clip_path.map(|path| {
-            geometry_path_flatten(&path)
-        });
         Frame {
             clip_bounds: bounds,
-            clip_path,  // ✅ 设置 clip path
             buffers: BufferStack::new(),
             meshes: Vec::new(),
             images: Vec::new(),
@@ -363,7 +356,7 @@ impl geometry::frame::Backend for Frame {
             let mut coverage_courter = geometry_path_flatten(&path);
             let paths: Vec<CoverageFillPath> = coverage_courter
                 .into_iter()
-                .map(|c| c.to_coverage_stroke_path(&stroke, scale_factor,&self.clip_path, path.clip_offset, &path.diff_path))
+                .map(|c| c.to_coverage_stroke_path(&stroke, scale_factor))
                 .collect();
 
             for path in paths {
@@ -420,7 +413,7 @@ impl geometry::frame::Backend for Frame {
             let mut coverage_courter = geometry_path_flatten(&path);
             let paths: Vec<CoverageFillPath> = coverage_courter
                 .into_iter()
-                .map(|c| c.to_coverage_stroke_path(&stroke, scale_factor,&self.clip_path, path.clip_offset, &path.diff_path))
+                .map(|c| c.to_coverage_stroke_path(&stroke, scale_factor))
                 .collect();
 
             for path in paths {

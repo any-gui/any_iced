@@ -1007,8 +1007,8 @@ impl graphics::geometry::Renderer for Renderer {
         geometry::Frame::new(bounds)
     }
 
-    fn custom(&self, bounds: Rectangle, clip_path: Option<Path>, scale_factor: f32, use_coverage_aa: bool) -> Self::Frame {
-        crate::geometry::Frame::custom(bounds, clip_path, scale_factor, use_coverage_aa)
+    fn custom(&self, bounds: Rectangle, scale_factor: f32, use_coverage_aa: bool) -> Self::Frame {
+        crate::geometry::Frame::custom(bounds, scale_factor, use_coverage_aa)
     }
 
     fn draw_geometry(&mut self, geometry: Self::Geometry) {

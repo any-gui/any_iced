@@ -75,9 +75,6 @@ impl ClipContour {
         self,
         stroke: &Stroke<'_>,
         scale_factor: f32,
-        clip_path: &Option<Vec<ClipContour>>,
-        offset: Option<f32>,
-        diff_path: &Option<lyon_path::Path>,
     ) -> CoverageFillPath {
         let Self { points, closed } = self;
         let style = stroke.style;
@@ -113,9 +110,6 @@ impl ClipContour {
         } else {
             delta_path(&clipper_path, join_type, end_type, stroke_delta)
         };
-
-        //clip and diff
-        let stroke = clip_by_path(stroke,clip_path,offset,diff_path);
 
         CoverageFillPath {
             fill_path: build_lyon_path_from_paths(stroke.clone(), closed),

@@ -40,7 +40,6 @@ pub trait Renderer: core::Renderer {
     fn custom(
         &self,
         bounds: Rectangle,
-        clip_path: Option<Path>,
         scale_factor: f32,
         use_coverage_aa: bool,
     ) -> Self::Frame;
@@ -56,7 +55,7 @@ impl Renderer for () {
 
     fn new_frame(&self, _bounds: Rectangle) -> Self::Frame {}
 
-    fn custom(&self, bounds: Rectangle, clip_path: Option<Path>, scale_factor: f32, use_coverage_aa: bool) -> Self::Frame {
+    fn custom(&self, bounds: Rectangle, scale_factor: f32, use_coverage_aa: bool) -> Self::Frame {
     }
 
     fn draw_geometry(&mut self, _geometry: Self::Geometry) {}

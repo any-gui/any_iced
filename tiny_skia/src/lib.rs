@@ -326,7 +326,7 @@ impl graphics::geometry::Renderer for Renderer {
         geometry::Frame::new(bounds)
     }
 
-    fn custom(&self, bounds: Rectangle, clip_path: Option<Path>, scale_factor: f32, use_coverage_aa: bool) -> Self::Frame {
+    fn custom(&self, bounds: Rectangle, scale_factor: f32, use_coverage_aa: bool) -> Self::Frame {
         self.new_frame(bounds)
     }
 
