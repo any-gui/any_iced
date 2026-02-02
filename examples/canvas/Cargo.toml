@@ -7,5 +7,6 @@ publish = false
 
 [dependencies]
 iced.workspace = true
-iced.features = ["canvas", "tokio", "debug"]
+iced.features = ["canvas", "tokio", "debug","wgpu"]
+iced_wgpu.workspace = true
 lyon.workspace = true

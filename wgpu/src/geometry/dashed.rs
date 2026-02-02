@@ -79,8 +79,7 @@ pub fn dashed_path(
 
     IcedPath {
         raw: builder.build(),
-        clip_offset: path.clip_offset,
-        diff_path: path.diff_path.clone(),
+        flattened: true,
     }
 }
 

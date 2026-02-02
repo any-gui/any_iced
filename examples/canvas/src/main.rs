@@ -3,17 +3,17 @@ use iced::widget::canvas::{self, Cache, Canvas, Geometry, Path, Stroke, stroke, 
 use iced::widget::center;
 use iced::window;
 use iced::{
-    border, Color, Element, Length, Point, Rectangle, Renderer, Size,
+    Color, Element, Length, Point, Rectangle, Renderer,
     Subscription, Theme, Task
 };
-
+use iced_wgpu::geometry::flat::geometry_path_flatten;
 pub fn main() -> iced::Result {
     iced::daemon(CustomCanvas::new, CustomCanvas::update, CustomCanvas::view)
         .subscription(CustomCanvas::subscription)
         .title(CustomCanvas::title)
         .theme(Theme::Dark)
         .settings(Settings {
-            antialiasing: false,
+            antialiasing: true,
             ..Settings::default()
         })
         .run()
@@ -121,48 +121,127 @@ impl<Message> canvas::Program<Message> for CustomCanvas {
             renderer,
             bounds.size(),
             |frame| {
-                // 150x150 的圆角矩形，居中在 200x200 的 canvas 中
-                // top_left = (200 - 150) / 2 = 25
-                let rect_size = Size::new(150.0, 150.0);
+                let path = Path::new(|builder| {
 
-                let top_left = Point::new(25.0, 25.0);
+                    builder.move_to(Point::new(0.0, 41.7484));
 
-                let diff_rect_size = Size::new(156.0, 154.0);
-                let diff_top_left = Point::new(23.0, 25.0);
+                    // C
+                    builder.bezier_curve_to(
+                        Point::new(0.0, 18.69142),
+                        Point::new(18.69142, 0.0),
+                        Point::new(41.7484, 0.0),
+                    );
 
-                // 圆角半径（可以根据需要调整）
-                let radius = border::Radius::from(30.0);
-                let diff_radius = border::Radius::from(34.0);
+                    // H
+                    builder.line_to(Point::new(117.3304, 0.0));
 
-                let diff = Path::rounded_rectangle(diff_top_left, diff_rect_size, diff_radius);
+                    // C
+                    builder.bezier_curve_to(
+                        Point::new(140.3876, 0.0),
+                        Point::new(159.079, 18.69142),
+                        Point::new(159.079, 41.7484),
+                    );
 
-                // 创建圆角矩形路径
-                let rounded_rect = Path::rounded_rectangle(top_left, rect_size, radius).with_diff_path(
-                    diff.to_raw()
+                    // C
+                    builder.bezier_curve_to(
+                        Point::new(159.079, 60.7632),
+                        Point::new(146.3668, 76.809),
+                        Point::new(128.9774, 81.8506),
+                    );
+
+                    // C
+                    builder.bezier_curve_to(
+                        Point::new(128.864, 81.8836),
+                        Point::new(128.7854, 81.9872),
+                        Point::new(128.7854, 82.1052),
+                    );
+
+                    // C
+                    builder.bezier_curve_to(
+                        Point::new(128.7854, 82.2232),
+                        Point::new(128.864, 82.327),
+                        Point::new(128.9774, 82.3598),
+                    );
+
+                    // C
+                    builder.bezier_curve_to(
+                        Point::new(146.3668, 87.4014),
+                        Point::new(159.079, 103.4472),
+                        Point::new(159.079, 122.462),
+                    );
+
+                    // C
+                    builder.bezier_curve_to(
+                        Point::new(159.079, 145.519),
+                        Point::new(140.3876, 164.2104),
+                        Point::new(117.3304, 164.2104),
+                    );
+
+                    // H
+                    builder.line_to(Point::new(41.7484, 164.2104));
+
+                    // C
+                    builder.bezier_curve_to(
+                        Point::new(18.69142, 164.2104),
+                        Point::new(0.0, 145.519),
+                        Point::new(0.0, 122.462),
+                    );
+
+                    // C
+                    builder.bezier_curve_to(
+                        Point::new(0.0, 103.5714),
+                        Point::new(12.54676, 87.611),
+                        Point::new(29.7616, 82.46),
+                    );
+
+                    // C
+                    builder.bezier_curve_to(
+                        Point::new(29.9184, 82.413),
+                        Point::new(30.027, 82.269),
+                        Point::new(30.027, 82.1052),
+                    );
+
+                    // C
+                    builder.bezier_curve_to(
+                        Point::new(30.027, 81.9416),
+                        Point::new(29.9184, 81.7974),
+                        Point::new(29.7616, 81.7506),
+                    );
+
+                    // C
+                    builder.bezier_curve_to(
+                        Point::new(12.54676, 76.5994),
+                        Point::new(0.0, 60.6392),
+                        Point::new(0.0, 41.7484),
+                    );
+
+                    builder.close();
+                });
+                let flat_path = geometry_path_flatten(&path);
+                let fg = Path::circle(Point::new(130.,100.), 100.);
+                let fg_flat_path = geometry_path_flatten(&fg);
+                let fg_path = fg_flat_path.clip(
+                    Some(&flat_path),Some(-8.),None
+                ).to_iced_path();
+                let stroke_path = flat_path.delta(-4.).to_iced_path();
+                let bg_path = flat_path.to_iced_path();
+                frame.fill(
+                    &bg_path,Color::from_rgb8(103,80,164)
                 );
-                //let rounded_rect = Path::rounded_rectangle(top_left, rect_size, radius);
-                let fill_color = Color::from_rgb(0.4, 0.8, 0.4);
-                //frame.fill(&diff, fill_color);
-                // 填充灰白色
-                //let fill_color = Color::from_rgb(0.4, 0.4, 0.4);
-                //frame.fill(&rounded_rect, fill_color);
-
-                // 绘制 4px 白色边框
-                // line_dash: LineDash {
-                //     segments: &[20.,20.],
-                //     offset: 0,
-                // },
                 frame.stroke(
-                    &rounded_rect,
+                    &stroke_path,
                     Stroke {
-                        style: stroke::Style::Solid(Color::WHITE.scale_alpha(1.)),
+                        style: stroke::Style::Solid(Color::BLACK.scale_alpha(0.2)),
                         width: 8.0,
                         line_dash: LineDash {
-                            segments: &[10.,10.],
+                            segments: &[],
                             offset: 0,
                         },
                         ..Default::default()
                     },
+                );
+                frame.fill(
+                    &fg_path,Color::WHITE.scale_alpha(0.2)
                 );
             },
             true,

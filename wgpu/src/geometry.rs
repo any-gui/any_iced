@@ -255,6 +255,7 @@ impl geometry::frame::Backend for Frame {
             let scale_factor = self.scale_factor;
             let mut coverage_courter = geometry_path_flatten(path);
             let paths: Vec<CoverageFillPath> = coverage_courter
+                .contours
                 .into_iter()
                 .map(|c| c.to_coverage_fill_path(style, scale_factor))
                 .collect();
@@ -311,6 +312,7 @@ impl geometry::frame::Backend for Frame {
 
             let mut coverage_courter = geometry_path_flatten(&path);
             let paths: Vec<CoverageFillPath> = coverage_courter
+                .contours
                 .into_iter()
                 .map(|c| c.to_coverage_fill_path(style, scale_factor))
                 .collect();
@@ -354,7 +356,7 @@ impl geometry::frame::Backend for Frame {
         if self.use_coverage_aa {
             let scale_factor = self.scale_factor;
             let mut coverage_courter = geometry_path_flatten(&path);
-            let paths: Vec<CoverageFillPath> = coverage_courter
+            let paths: Vec<CoverageFillPath> = coverage_courter.contours
                 .into_iter()
                 .map(|c| c.to_coverage_stroke_path(&stroke, scale_factor))
                 .collect();
@@ -412,6 +414,7 @@ impl geometry::frame::Backend for Frame {
             );
             let mut coverage_courter = geometry_path_flatten(&path);
             let paths: Vec<CoverageFillPath> = coverage_courter
+                .contours
                 .into_iter()
                 .map(|c| c.to_coverage_stroke_path(&stroke, scale_factor))
                 .collect();

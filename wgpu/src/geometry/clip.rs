@@ -8,7 +8,7 @@ use wgpu::naga::compact::KeepUnused::No;
 use iced_graphics::geometry::path::lyon_path;
 use crate::core::Rectangle;
 use crate::geometry::coverage_aa::{build_aa_mesh, CoverageMesh, AA_FEATHER_ONE_SIDE};
-use crate::geometry::flat::lyon_path_flatten;
+use crate::geometry::flat::{lyon_path_flatten, FlattenedPath};
 
 const MITER_LIMIT: f64 = 4.0;
 const SIMPLIFY_EPSILON: f64 = 0.05;
@@ -153,27 +153,66 @@ impl ClipContour {
             aa_mesh: build_aa_mesh(fill_paths, style, scale_factor),
         }
     }
+
+    pub fn delta(&self,amount: f32) -> Vec<ClipContour> {
+        let Self { points, closed } = self;
+        let mut path: Vec<ClipPoint> = points
+            .into_iter()
+            .map(|p| ClipPoint::new(p.x as f64, p.y as f64))
+            .collect();
+        //  CCW（offset > 0 向外）
+        if signed_area(&path) < 0 {
+            path.reverse();
+        }
+
+        // path and config
+        let clipper_path = Path::new(path);
+        let join_type = JoinType::Bevel;
+        let end_type = match closed {
+            true => EndType::Polygon,
+            _ => EndType::Round,
+        };
+
+        // delta
+        let stroke = if *closed {
+            delta_path(&clipper_path, join_type, end_type, amount)
+        } else {
+            delta_path(&clipper_path, join_type, end_type, amount)
+        };
+
+        // build contours
+        clip_path_to_contour(stroke,*closed)
+    }
+
+    pub fn to_clipper_path(self) -> Path {
+        let Self { points, closed } = self;
+        points.iter().map(|p| ClipPoint::new(p.x as f64, p.y as f64)).collect()
+    }
 }
 
 pub fn clip_by_path(
     mut paths: Paths,
-    clip_path: &Option<Vec<ClipContour>>,
+    clip_path: Option<&FlattenedPath>,
     offset: Option<f32>,
-    diff_path: &Option<lyon_path::Path>,
-) -> Paths {
+    diff_path: Option<&FlattenedPath>,
+    is_closed: bool,
+) -> FlattenedPath {
     //make clip path
     let clip_paths = match (clip_path, offset) {
-        (Some(clip_contours), Some(offset)) => {
-            let paths = clip_contours.iter().map(|c| contour_to_clip_path(c)).collect();
-            let paths = Paths::new(paths);
-            Some(delta(&paths, JoinType::Miter, EndType::Polygon, offset))
+        (Some(clip_path), Some(offset)) => {
+            if clip_path.contours.is_empty() {
+                None
+            } else {
+                let paths = clip_path.contours.iter().map(|c| contour_to_clip_path(c)).collect();
+                let paths = Paths::new(paths);
+                Some(delta(&paths, JoinType::Miter, EndType::Polygon, offset))
+            }
         },
         (_,_) => None
     };
     //make diff path
-    let diff_paths = diff_path.as_ref().map(|lyon_path|{
-        let flat_contours = lyon_path_flatten(lyon_path);
-        let paths = flat_contours.iter().map(|c| contour_to_clip_path(c)).collect();
+    let diff_paths = diff_path.map(|flat_path|{
+        let paths = flat_path.contours.iter().map(|c| contour_to_clip_path(c)).collect();
         Paths::new(paths)
     });
     if let Some(clip_path) = &clip_paths {
@@ -182,10 +221,10 @@ pub fn clip_by_path(
     if let Some(diff_path) = &diff_paths {
         paths = diff(&paths, diff_path.clone());
     }
-    paths
+    FlattenedPath { contours:clip_path_to_contour(paths,is_closed) }
 }
 
-fn contour_to_clip_path(contour: &ClipContour) -> Path {
+pub(crate) fn contour_to_clip_path(contour: &ClipContour) -> Path {
     contour.points.iter().map(|p| ClipPoint::new(p.x as f64, p.y as f64)).collect()
 }
 
@@ -273,7 +312,6 @@ fn build_lyon_path_from_paths(outer_paths: Paths, is_closed: bool) -> iced_graph
 
     iced_graphics::geometry::Path {
         raw: builder.build(),
-        clip_offset: None,
-        diff_path: None,
+        flattened:true
     }
 }
