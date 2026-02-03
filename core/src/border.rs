@@ -229,13 +229,14 @@ impl Radius {
     }
 
     /// Sub by f32
-    pub fn sub(&self, rhs: f32) -> Option<Self> {
+    pub fn sub(&self, rhs: impl Into<Radius>) -> Option<Self> {
+        let rhs = rhs.into();
         let Self { top_left, top_right, bottom_right, bottom_left } = self;
         let r = Self {
-            top_left: (*top_left - rhs).max(0.0),
-            top_right: (*top_right - rhs).max(0.0),
-            bottom_right: (*bottom_right - rhs).max(0.0),
-            bottom_left: (*bottom_left - rhs).max(0.0),
+            top_left: (*top_left - rhs.top_left).max(0.0),
+            top_right: (*top_right - rhs.top_right).max(0.0),
+            bottom_right: (*bottom_right - rhs.bottom_right).max(0.0),
+            bottom_left: (*bottom_left - rhs.bottom_left).max(0.0),
         };
         if r.has_radius() {
             Some(r)
@@ -245,13 +246,14 @@ impl Radius {
     }
 
     /// Add by f32
-    pub fn add(&self, rhs: f32) -> Option<Self> {
+    pub fn add(&self, rhs: impl Into<Radius>) -> Option<Self> {
+        let rhs = rhs.into();
         let Self { top_left, top_right, bottom_right, bottom_left } = self;
         let r = Self {
-            top_left: (*top_left + rhs).max(0.0),
-            top_right: (*top_right + rhs).max(0.0),
-            bottom_right: (*bottom_right + rhs).max(0.0),
-            bottom_left: (*bottom_left + rhs).max(0.0),
+            top_left: (*top_left + rhs.top_left).max(0.0),
+            top_right: (*top_right + rhs.top_right).max(0.0),
+            bottom_right: (*bottom_right + rhs.bottom_right).max(0.0),
+            bottom_left: (*bottom_left + rhs.bottom_left).max(0.0),
         };
         if r.has_radius() {
             Some(r)
