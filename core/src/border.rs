@@ -222,6 +222,43 @@ impl Radius {
             ..self
         }
     }
+
+    ///If any corner has none zero radius
+    pub fn has_radius(&self) -> bool {
+        self.top_right > 0. || self.bottom_right > 0. || self.bottom_left > 0. || self.top_left > 0.0
+    }
+
+    /// Sub by f32
+    pub fn sub(&self, rhs: f32) -> Option<Self> {
+        let Self { top_left, top_right, bottom_right, bottom_left } = self;
+        let r = Self {
+            top_left: (*top_left - rhs).max(0.0),
+            top_right: (*top_right - rhs).max(0.0),
+            bottom_right: (*bottom_right - rhs).max(0.0),
+            bottom_left: (*bottom_left - rhs).max(0.0),
+        };
+        if r.has_radius() {
+            Some(r)
+        } else {
+            None
+        }
+    }
+
+    /// Add by f32
+    pub fn add(&self, rhs: f32) -> Option<Self> {
+        let Self { top_left, top_right, bottom_right, bottom_left } = self;
+        let r = Self {
+            top_left: (*top_left + rhs).max(0.0),
+            top_right: (*top_right + rhs).max(0.0),
+            bottom_right: (*bottom_right + rhs).max(0.0),
+            bottom_left: (*bottom_left + rhs).max(0.0),
+        };
+        if r.has_radius() {
+            Some(r)
+        } else {
+            None
+        }
+    }
 }
 
 impl From<f32> for Radius {
