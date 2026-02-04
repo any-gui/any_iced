@@ -41,6 +41,20 @@ impl Gradient {
             }
         }
     }
+
+    /// From iced core gradient
+    pub fn from_gradient(gradient: &core::Gradient,bound: &Rectangle) -> Self {
+        match gradient {
+            core::Gradient::Linear(l) => {
+                let (start, end) = l.angle.to_distance(bound);
+                Gradient::Linear(Linear {
+                    start,
+                    end,
+                    stops: l.stops,
+                })
+            }
+        }
+    }
 }
 
 /// A linear gradient.
