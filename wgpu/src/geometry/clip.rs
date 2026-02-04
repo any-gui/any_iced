@@ -6,7 +6,7 @@ use lyon::math::Point as LyonPoint;
 use lyon::path::Path as LyonPath;
 use wgpu::naga::compact::KeepUnused::No;
 use iced_graphics::geometry::path::lyon_path;
-use crate::core::Rectangle;
+use crate::core::{Rectangle, Vector};
 use crate::geometry::coverage_aa::{build_aa_mesh, CoverageMesh, AA_FEATHER_ONE_SIDE};
 use crate::geometry::flat::{lyon_path_flatten, FlattenedPath};
 
@@ -187,6 +187,17 @@ impl ClipContour {
     pub fn to_clipper_path(self) -> Path {
         let Self { points, closed } = self;
         points.iter().map(|p| ClipPoint::new(p.x as f64, p.y as f64)).collect()
+    }
+    
+    pub fn transform(self, vector: Vector) -> Self {
+        let Self { points, closed } = self;
+        Self {
+            points: points.into_iter().map(|p| ClipContourPoint{
+                x: p.x + vector.x,
+                y: p.y + vector.y,
+            }).collect(),
+            closed,
+        }
     }
 }
 

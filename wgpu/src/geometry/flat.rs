@@ -2,7 +2,7 @@ use clipper2::Paths;
 use lyon::path::Event;
 use lyon::path::iterator::PathIterator;
 use iced_graphics::geometry::Path;
-use crate::core::Point;
+use crate::core::{Point, Vector};
 use crate::geometry::clip::{clip_by_path, ClipContour, ClipContourPoint};
 
 const FLAT_TOLERANCE: f32 = 0.05;
@@ -73,6 +73,12 @@ impl FlattenedPath {
                 }
             }
         } )
+    }
+
+    pub fn transform(self,vector: Vector) -> Self {
+        let Self { contours } = self;
+        let new_contours: Vec<ClipContour> = contours.into_iter().map(|c|c.transform(vector)).collect();
+        FlattenedPath { contours: new_contours }
     }
 
     pub fn delta(&self,amount: f32) -> FlattenedPath {
