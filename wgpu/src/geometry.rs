@@ -3,7 +3,7 @@
 pub mod clip;
 pub mod coverage_aa;
 pub mod flat;
-mod dashed;
+pub mod dashed;
 
 use crate::core::text::LineHeight;
 use crate::core::{

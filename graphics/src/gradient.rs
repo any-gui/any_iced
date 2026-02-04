@@ -33,6 +33,7 @@ impl Gradient {
         }
     }
 
+    /// Scale Alpha
     pub fn scale_alpha(self, factor: f32) -> Self {
         match self {
             Gradient::Linear(linear) => {
