@@ -32,6 +32,14 @@ impl Gradient {
             Gradient::Linear(linear) => linear.pack(),
         }
     }
+
+    pub fn scale_alpha(self, factor: f32) -> Self {
+        match self {
+            Gradient::Linear(linear) => {
+                Gradient::Linear(linear.scale_alpha(factor))
+            }
+        }
+    }
 }
 
 /// A linear gradient.
@@ -127,6 +135,15 @@ impl Linear {
             offsets,
             direction,
         }
+    }
+
+    /// Scales the alpha channel of the [`Linear`] gradient by the given
+    /// factor.
+    pub fn scale_alpha(mut self, factor: f32) -> Self {
+        for stop in self.stops.iter_mut().flatten() {
+            stop.color.a *= factor;
+        }
+        self
     }
 }
 
