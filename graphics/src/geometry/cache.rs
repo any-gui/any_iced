@@ -3,6 +3,7 @@ use crate::core::{Rectangle, Size};
 use crate::geometry::{self, Frame, Path};
 
 pub use cache::Group;
+use iced_core::Padding;
 
 /// A simple cache that stores generated geometry to avoid recomputation.
 ///
@@ -120,12 +121,13 @@ where
         &self,
         renderer: &Renderer,
         size: Size,
+        padding: impl Into<Padding>,
         draw_fn: impl FnOnce(&mut Frame<Renderer>),
         use_coverage_aa: bool,
         scale_factor: f32,
     ) -> Renderer::Geometry {
         use std::ops::Deref;
-        let bounds = Rectangle::with_size(size);
+        let bounds = Rectangle::with_size(size).expand(padding);
         let state = self.raw.state();
 
         let previous = match state.borrow().deref() {

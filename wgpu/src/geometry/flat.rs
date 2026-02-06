@@ -1,9 +1,10 @@
 use clipper2::Paths;
 use lyon::path::Event;
 use lyon::path::iterator::PathIterator;
-use iced_graphics::geometry::Path;
+use iced_graphics::geometry::{path, LineDash, Path};
 use crate::core::{Point, Vector};
 use crate::geometry::clip::{clip_by_path, ClipContour, ClipContourPoint};
+use crate::geometry::dashed::dashed_path;
 
 const FLAT_TOLERANCE: f32 = 0.05;
 
@@ -54,7 +55,7 @@ impl FlattenedPath {
         FlattenedPath { contours }
     }
 
-    pub fn to_iced_path(self) -> Path {
+    pub fn to_iced_path(&self) -> Path {
         let Self { contours } = self;
         Path::new(|builder| {
             for contour in contours {
@@ -67,7 +68,7 @@ impl FlattenedPath {
                             builder.line_to(Point::new(p.x,p.y))
                         }
                     }
-                    if closed {
+                    if *closed {
                         builder.close();
                     }
                 }
@@ -85,6 +86,16 @@ impl FlattenedPath {
         let Self { contours } = self;
         let new_contours: Vec<ClipContour> = contours.into_iter().flat_map(|c|c.delta(amount)).collect();
         FlattenedPath { contours: new_contours }
+    }
+
+    pub fn dashed(&self,dash: LineDash<'_>,) -> FlattenedPath {
+        let iced_path = self.to_iced_path();
+        let path  = dashed_path(&iced_path,dash);
+        geometry_path_flatten(&path)
+    }
+
+    pub fn from_path(path: &Path) -> FlattenedPath {
+        geometry_path_flatten(path)
     }
 }
 

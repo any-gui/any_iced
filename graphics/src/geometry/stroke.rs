@@ -95,4 +95,7 @@ pub struct LineDash<'a> {
 
     /// The offset of [`LineDash::segments`] to start the pattern.
     pub offset: usize,
+
+    /// The phase of Dash, Can be used for animation
+    pub phase: f32,
 }

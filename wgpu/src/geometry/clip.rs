@@ -170,7 +170,7 @@ impl ClipContour {
         let join_type = JoinType::Bevel;
         let end_type = match closed {
             true => EndType::Polygon,
-            _ => EndType::Round,
+            _ => EndType::Butt,
         };
 
         // delta

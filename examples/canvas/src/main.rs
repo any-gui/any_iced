@@ -1,19 +1,23 @@
-use iced::{mouse, RendererStyle, Settings};
-use iced::widget::canvas::{self, Cache, Canvas, Geometry, Path, Stroke, stroke, LineDash};
-use iced::widget::center;
+use iced::border::Radius;
+use iced::widget::canvas::{
+    self, Cache, Canvas, Geometry, LineDash, Path, Stroke, stroke,
+};
+use iced::widget::{center, Container};
 use iced::window;
 use iced::{
-    Color, Element, Length, Point, Rectangle, Renderer,
-    Subscription, Theme, Task
+    Color, Element, Length, Point, Rectangle, Renderer, Subscription, Task,
+    Theme,
 };
-use iced_wgpu::geometry::flat::geometry_path_flatten;
+use iced::{RendererStyle, Settings, Size, mouse};
+use iced::widget::container::Style;
+use iced_wgpu::geometry::flat::{geometry_path_flatten, FlattenedPath};
 pub fn main() -> iced::Result {
     iced::daemon(CustomCanvas::new, CustomCanvas::update, CustomCanvas::view)
         .subscription(CustomCanvas::subscription)
         .title(CustomCanvas::title)
         .theme(Theme::Dark)
         .settings(Settings {
-            antialiasing: true,
+            antialiasing: false,
             ..Settings::default()
         })
         .run()
@@ -78,16 +82,25 @@ impl CustomCanvas {
 
     fn view(&self, window_id: window::Id) -> Element<'_, Message> {
         center(
-            Canvas::new(self)
-                .width(Length::Fixed(200.0))
+            Container::new(
+                Canvas::new(self)
+                    .width(Length::Fixed(200.0))
+                    .height(Length::Fixed(200.0)),
+            ).width(Length::Fixed(200.0))
                 .height(Length::Fixed(200.0))
-        ).into()
+                .style(
+                    |s| {
+                        Style::default().background(Color::BLACK)
+                    }
+                )
+        )
+        .into()
     }
 
     fn subscription(&self) -> Subscription<Message> {
         Subscription::batch([
             window::close_events().map(Message::WindowClosed),
-            window::resize_events().map(|(id,size)| Message::WindowResized ),
+            window::resize_events().map(|(id, size)| Message::WindowResized),
         ])
     }
 }
@@ -106,13 +119,13 @@ impl<Message> canvas::Program<Message> for CustomCanvas {
     ) -> Vec<Geometry> {
         //let clip_path = Path::circle(Point::new(100.0, 55.0), 50.);
         let clip_path = Path::new(|builder| {
-            builder.move_to(Point::new(100.,10.));
+            builder.move_to(Point::new(100., 10.));
             builder.line_to(Point::new(190., 100.));
             builder.line_to(Point::new(10., 100.));
             builder.close();
         });
         let border_path = Path::new(|builder| {
-            builder.move_to(Point::new(100.,10.));
+            builder.move_to(Point::new(100., 10.));
             builder.line_to(Point::new(190., 100.));
             builder.line_to(Point::new(10., 100.));
             builder.close();
@@ -120,8 +133,9 @@ impl<Message> canvas::Program<Message> for CustomCanvas {
         let geometry = self.cache.draw_with_custom_config(
             renderer,
             bounds.size(),
+            100.,
             |frame| {
-                let path = Path::new(|builder| {
+                /*let path = Path::new(|builder| {
 
                     builder.move_to(Point::new(0.0, 41.7484));
 
@@ -242,7 +256,22 @@ impl<Message> canvas::Program<Message> for CustomCanvas {
                 );
                 frame.fill(
                     &fg_path,Color::WHITE.scale_alpha(0.2)
+                );*/
+                let base_path = Path::rounded_rectangle(
+                    Point::new(25., 25.),
+                    Size::new(200., 200.),
+                    Radius::new(4.),
                 );
+                let flat_base_path = FlattenedPath::from_path(&base_path);
+                let dashed = FlattenedPath::from_path(&base_path).dashed(LineDash{
+                    segments: &[10.,10.],
+                    offset: 0,
+                    phase: 0.0,
+                });
+                let path = dashed.delta(2.);
+                let path = path.clip(Some(&flat_base_path),Some(0.),None).to_iced_path();
+                frame.fill(&base_path, Color::from_rgba8(255,255,255,0.2));
+                //frame.fill(&path, Color::BLACK);
             },
             true,
             _style.scale_factor_for_aa,
