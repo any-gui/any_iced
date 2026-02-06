@@ -263,7 +263,7 @@ impl<Message> canvas::Program<Message> for CustomCanvas {
                     Radius::new(4.),
                 );
                 let flat_base_path = FlattenedPath::from_path(&base_path);
-                let dashed = FlattenedPath::from_path(&base_path).dashed(LineDash{
+                let dashed = FlattenedPath::from_path(&base_path).dashed(&LineDash{
                     segments: &[10.,10.],
                     offset: 0,
                     phase: 0.0,

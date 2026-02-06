@@ -36,10 +36,10 @@ impl<'a> DashState<'a> {
 
 pub fn dashed_path(
     path: &IcedPath,
-    dash: LineDash<'_>,
+    dash: &LineDash<'_>,
 ) -> IcedPath {
     let tolerance = FLAT_TOLERANCE;
-    let mut dash_state = DashState::new(dash);
+    let mut dash_state = DashState::new(*dash);
 
     let mut builder = Path::builder();
     let mut drawing = false;

@@ -88,9 +88,9 @@ impl FlattenedPath {
         FlattenedPath { contours: new_contours }
     }
 
-    pub fn dashed(&self,dash: LineDash<'_>,) -> FlattenedPath {
+    pub fn dashed(&self,dash: &LineDash<'_>,) -> FlattenedPath {
         let iced_path = self.to_iced_path();
-        let path  = dashed_path(&iced_path,dash);
+        let path  = dashed_path(&iced_path,&dash);
         geometry_path_flatten(&path)
     }
 

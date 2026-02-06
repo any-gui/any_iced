@@ -349,7 +349,7 @@ impl geometry::frame::Backend for Frame {
         let path = if stroke.line_dash.segments.is_empty() {
             Cow::Borrowed(path)
         } else {
-            Cow::Owned(dashed_path(path, stroke.line_dash))
+            Cow::Owned(dashed_path(path, &stroke.line_dash))
         };
 
         //if coverage aa
