@@ -57,7 +57,7 @@ impl FlattenedPath {
 
     pub fn to_iced_path(&self) -> Path {
         let Self { contours } = self;
-        Path::new(|builder| {
+        let path = Path::new(|builder| {
             for contour in contours {
                 let ClipContour { points, closed } = contour;
                 if points.len() > 1 {
@@ -73,7 +73,8 @@ impl FlattenedPath {
                     }
                 }
             }
-        } )
+        } );
+        path.with_flattened(true)
     }
 
     pub fn transform(self,vector: Vector) -> Self {

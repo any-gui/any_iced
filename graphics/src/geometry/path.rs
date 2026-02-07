@@ -88,4 +88,9 @@ impl Path {
             flattened: self.flattened,
         }
     }
+    
+    /// Set flattened
+    pub fn with_flattened(self, flattened: bool) -> Self {
+        Self { raw: self.raw, flattened }
+    }
 }

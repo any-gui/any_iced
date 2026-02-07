@@ -1,14 +1,18 @@
-use iced_graphics::geometry::{Fill, LineCap, LineJoin, Stroke};
-use iced_graphics::geometry::fill::Rule;
+use crate::core::{Rectangle, Vector};
+use crate::geometry::coverage_aa::{
+    AA_FEATHER_ONE_SIDE, CoverageMesh, build_aa_mesh,
+};
+use crate::geometry::flat::{FlattenedPath, lyon_path_flatten};
+use clipper2::{
+    Bounds, EndType, FillRule, JoinType, Path, Paths, Point as ClipPoint,
+};
 use iced_graphics::Mesh;
-use clipper2::{Bounds, EndType, FillRule, JoinType, Path, Paths, Point as ClipPoint};
+use iced_graphics::geometry::fill::Rule;
+use iced_graphics::geometry::path::lyon_path;
+use iced_graphics::geometry::{Fill, LineCap, LineJoin, Stroke, Style};
 use lyon::math::Point as LyonPoint;
 use lyon::path::Path as LyonPath;
 use wgpu::naga::compact::KeepUnused::No;
-use iced_graphics::geometry::path::lyon_path;
-use crate::core::{Rectangle, Vector};
-use crate::geometry::coverage_aa::{build_aa_mesh, CoverageMesh, AA_FEATHER_ONE_SIDE};
-use crate::geometry::flat::{lyon_path_flatten, FlattenedPath};
 
 const MITER_LIMIT: f64 = 4.0;
 const SIMPLIFY_EPSILON: f64 = 0.05;
@@ -21,30 +25,63 @@ pub struct ClipContourPoint {
 
 impl ClipContourPoint {
     pub fn new(x: f32, y: f32) -> Self {
+        Self { x, y }
+    }
+    pub fn add(self, other: Self) -> Self {
         Self {
-            x,
-            y,
+            x: self.x + other.x,
+            y: self.y + other.y,
         }
     }
-    pub fn add(self, other: Self) -> Self { Self { x: self.x + other.x, y: self.y + other.y } }
-    pub fn sub(self, other: Self) -> Self { Self { x: self.x - other.x, y: self.y - other.y } }
-    pub fn mul(self, s: f32) -> Self { Self { x: self.x * s, y: self.y * s } }
-    pub fn dot(self, other: Self) -> f32 { self.x * other.x + self.y * other.y }
-    pub fn cross(self, other: Self) -> f32 { self.x * other.y - self.y * other.x }
-    pub fn length(self) -> f32 { (self.x * self.x + self.y * self.y).sqrt() }
-    pub fn length_sq(self) -> f32 { self.x * self.x + self.y * self.y }
+    pub fn sub(self, other: Self) -> Self {
+        Self {
+            x: self.x - other.x,
+            y: self.y - other.y,
+        }
+    }
+    pub fn mul(self, s: f32) -> Self {
+        Self {
+            x: self.x * s,
+            y: self.y * s,
+        }
+    }
+    pub fn dot(self, other: Self) -> f32 {
+        self.x * other.x + self.y * other.y
+    }
+    pub fn cross(self, other: Self) -> f32 {
+        self.x * other.y - self.y * other.x
+    }
+    pub fn length(self) -> f32 {
+        (self.x * self.x + self.y * self.y).sqrt()
+    }
+    pub fn length_sq(self) -> f32 {
+        self.x * self.x + self.y * self.y
+    }
     pub fn normalize(self) -> Self {
         let len = self.length();
-        if len == 0.0 { self } else { self.mul(1.0 / len) }
+        if len == 0.0 {
+            self
+        } else {
+            self.mul(1.0 / len)
+        }
     }
     pub fn perp(self) -> Self {
-        Self { x: -self.y, y: self.x }
+        Self {
+            x: -self.y,
+            y: self.x,
+        }
     }
     pub fn rot90_cw(self) -> Self {
-        Self { x: self.y, y: -self.x }
+        Self {
+            x: self.y,
+            y: -self.x,
+        }
     }
     pub fn rot90_ccw(self) -> Self {
-        Self { x: -self.y, y: self.x }
+        Self {
+            x: -self.y,
+            y: self.x,
+        }
     }
     pub fn atan2(self) -> f32 {
         self.y.atan2(self.x)
@@ -101,11 +138,18 @@ impl ClipContour {
             (false, LineCap::Square) => EndType::Square,
         };
         //aa + stroke path = width.
-        let mut stroke_delta = (stroke.width - (AA_FEATHER_ONE_SIDE * 2. / scale_factor)) * 0.5;
+        let mut stroke_delta =
+            (stroke.width - (AA_FEATHER_ONE_SIDE * 2. / scale_factor)) * 0.5;
         stroke_delta = stroke_delta.max(1. / scale_factor / 2.);
         let stroke = if closed {
-            let stroke_outer = delta_path(&clipper_path, join_type, end_type, stroke_delta);
-            let stroke_inner = delta_path(&clipper_path, join_type, end_type, -1. * stroke_delta);
+            let stroke_outer =
+                delta_path(&clipper_path, join_type, end_type, stroke_delta);
+            let stroke_inner = delta_path(
+                &clipper_path,
+                join_type,
+                end_type,
+                -1. * stroke_delta,
+            );
             diff(&stroke_outer, stroke_inner)
         } else {
             delta_path(&clipper_path, join_type, end_type, stroke_delta)
@@ -154,7 +198,7 @@ impl ClipContour {
         }
     }
 
-    pub fn delta(&self,amount: f32) -> Vec<ClipContour> {
+    pub fn delta(&self, amount: f32) -> Vec<ClipContour> {
         let Self { points, closed } = self;
         let mut path: Vec<ClipPoint> = points
             .into_iter()
@@ -181,22 +225,65 @@ impl ClipContour {
         };
 
         // build contours
-        clip_path_to_contour(stroke,*closed)
+        clip_path_to_contour(stroke, *closed)
     }
 
     pub fn to_clipper_path(self) -> Path {
         let Self { points, closed } = self;
-        points.iter().map(|p| ClipPoint::new(p.x as f64, p.y as f64)).collect()
+        points
+            .iter()
+            .map(|p| ClipPoint::new(p.x as f64, p.y as f64))
+            .collect()
     }
-    
+
     pub fn transform(self, vector: Vector) -> Self {
         let Self { points, closed } = self;
         Self {
-            points: points.into_iter().map(|p| ClipContourPoint{
-                x: p.x + vector.x,
-                y: p.y + vector.y,
-            }).collect(),
+            points: points
+                .into_iter()
+                .map(|p| ClipContourPoint {
+                    x: p.x + vector.x,
+                    y: p.y + vector.y,
+                })
+                .collect(),
             closed,
+        }
+    }
+}
+
+pub trait VecExt {
+    fn to_coverage_fill_path(
+        self,
+        style: iced_graphics::geometry::fill::Style,
+        scale_factor: f32,
+    ) -> CoverageFillPath;
+}
+
+impl VecExt for Vec<ClipContour> {
+    fn to_coverage_fill_path(self, style: Style, scale_factor: f32) -> CoverageFillPath {
+        let paths = self.into_iter().map(|c|{
+            let path: Vec<ClipPoint> = c.points
+                .into_iter()
+                .map(|p| ClipPoint::new(p.x as f64, p.y as f64))
+                .collect();
+            Path::new(path)
+        }).collect();
+
+        let fill_path = Paths::new(paths);
+        let aa_offset = AA_FEATHER_ONE_SIDE * (1. / scale_factor);
+        let fill_paths: Paths = delta(
+            &fill_path,
+            JoinType::Miter,
+            EndType::Polygon,
+            -1. * aa_offset,
+        );
+        CoverageFillPath {
+            fill_path: build_lyon_path_from_paths(fill_paths.clone(), true),
+            fill: Fill {
+                style,
+                rule: Rule::EvenOdd,
+            },
+            aa_mesh: build_aa_mesh(fill_paths, style, scale_factor),
         }
     }
 }
@@ -214,16 +301,24 @@ pub fn clip_by_path(
             if clip_path.contours.is_empty() {
                 None
             } else {
-                let paths = clip_path.contours.iter().map(|c| contour_to_clip_path(c)).collect();
+                let paths = clip_path
+                    .contours
+                    .iter()
+                    .map(|c| contour_to_clip_path(c))
+                    .collect();
                 let paths = Paths::new(paths);
                 Some(delta(&paths, JoinType::Miter, EndType::Polygon, offset))
             }
-        },
-        (_,_) => None
+        }
+        (_, _) => None,
     };
     //make diff path
-    let diff_paths = diff_path.map(|flat_path|{
-        let paths = flat_path.contours.iter().map(|c| contour_to_clip_path(c)).collect();
+    let diff_paths = diff_path.map(|flat_path| {
+        let paths = flat_path
+            .contours
+            .iter()
+            .map(|c| contour_to_clip_path(c))
+            .collect();
         Paths::new(paths)
     });
     if let Some(clip_path) = &clip_paths {
@@ -232,20 +327,37 @@ pub fn clip_by_path(
     if let Some(diff_path) = &diff_paths {
         paths = diff(&paths, diff_path.clone());
     }
-    FlattenedPath { contours:clip_path_to_contour(paths,is_closed) }
+    FlattenedPath {
+        contours: clip_path_to_contour(paths, is_closed),
+    }
 }
 
 pub(crate) fn contour_to_clip_path(contour: &ClipContour) -> Path {
-    contour.points.iter().map(|p| ClipPoint::new(p.x as f64, p.y as f64)).collect()
+    contour
+        .points
+        .iter()
+        .map(|p| ClipPoint::new(p.x as f64, p.y as f64))
+        .collect()
 }
 
-fn clip_path_to_contour(paths: Paths,is_closed: bool) -> Vec<ClipContour> {
-    paths.into_iter().map(|path|{
-        ClipContour {
-            points: path.into_iter().map(|point|ClipContourPoint::new(point.x() as f32, point.y() as f32)).collect(),
-            closed: is_closed,
-        }
-    }).collect()
+fn clip_path_to_contour(paths: Paths, is_closed: bool) -> Vec<ClipContour> {
+    paths
+        .into_iter()
+        .map(|path| {
+            let points = path.into_iter()
+                .map(|point| {
+                    ClipContourPoint::new(
+                        point.x() as f32,
+                        point.y() as f32,
+                    )
+                })
+                .collect();
+            ClipContour {
+                points,
+                closed: is_closed,
+            }
+        })
+        .collect()
 }
 
 pub fn signed_area(path: &[ClipPoint]) -> i64 {
@@ -258,18 +370,29 @@ pub fn signed_area(path: &[ClipPoint]) -> i64 {
         let p = &path[i];
         let q = &path[(i + 1) % n];
 
-        area += (p.x() as i128) * (q.y() as i128) - (q.x() as i128) * (p.y() as i128);
+        area += (p.x() as i128) * (q.y() as i128)
+            - (q.x() as i128) * (p.y() as i128);
     }
     area as i64
 }
 
-fn delta(path: &Paths, join_type: JoinType, end_type: EndType, _delta: f32) -> Paths {
+fn delta(
+    path: &Paths,
+    join_type: JoinType,
+    end_type: EndType,
+    _delta: f32,
+) -> Paths {
     let delta = _delta as f64;
     path.inflate(delta, join_type, end_type, MITER_LIMIT)
         .simplify(SIMPLIFY_EPSILON, false)
 }
 
-fn delta_path(path: &Path, join_type: JoinType, end_type: EndType, _delta: f32) -> Paths {
+fn delta_path(
+    path: &Path,
+    join_type: JoinType,
+    end_type: EndType,
+    _delta: f32,
+) -> Paths {
     let delta = _delta as f64;
     path.inflate(delta, join_type, end_type, MITER_LIMIT)
         .simplify(SIMPLIFY_EPSILON, false)
@@ -291,7 +414,10 @@ fn intersect(subject: &Paths, clip: Paths) -> Paths {
         .expect("clipper difference failed")
 }
 
-fn build_lyon_path_from_paths(outer_paths: Paths, is_closed: bool) -> iced_graphics::geometry::Path {
+fn build_lyon_path_from_paths(
+    outer_paths: Paths,
+    is_closed: bool,
+) -> iced_graphics::geometry::Path {
     let mut builder = LyonPath::builder();
 
     for path in outer_paths {
@@ -312,7 +438,8 @@ fn build_lyon_path_from_paths(outer_paths: Paths, is_closed: bool) -> iced_graph
         let mut it = iter.peekable();
         let first = it.next().unwrap();
 
-        let _ = builder.begin(LyonPoint::new(first.x() as f32, first.y() as f32));
+        let _ =
+            builder.begin(LyonPoint::new(first.x() as f32, first.y() as f32));
 
         for p in it {
             let _ = builder.line_to(LyonPoint::new(p.x() as f32, p.y() as f32));
@@ -323,6 +450,6 @@ fn build_lyon_path_from_paths(outer_paths: Paths, is_closed: bool) -> iced_graph
 
     iced_graphics::geometry::Path {
         raw: builder.build(),
-        flattened:true
+        flattened: true,
     }
 }

@@ -24,7 +24,7 @@ use crate::triangle;
 use lyon::geom::euclid;
 use lyon::tessellation;
 
-use crate::geometry::clip::{clip_by_path, ClipContour, CoverageFillPath};
+use crate::geometry::clip::{clip_by_path, ClipContour, CoverageFillPath, VecExt};
 use crate::geometry::flat::geometry_path_flatten;
 use iced_graphics::geometry::fill::Rule;
 use lyon::lyon_tessellation::{FillGeometryBuilder, StrokeGeometryBuilder};
@@ -254,14 +254,10 @@ impl geometry::frame::Backend for Frame {
         if self.use_coverage_aa {
             let scale_factor = self.scale_factor;
             let mut coverage_courter = geometry_path_flatten(path);
-            let paths: Vec<CoverageFillPath> = coverage_courter
-                .contours
-                .into_iter()
-                .map(|c| c.to_coverage_fill_path(style, scale_factor))
-                .collect();
-            for path in paths {
-                self.tessellate_coverage_fill(path,style);
-            }
+            let paths = coverage_courter.contours.to_coverage_fill_path(
+                style, scale_factor
+            );
+            self.tessellate_coverage_fill(paths,style);
         } else {
             let mut buffer = self.buffers.get_fill(&style);
             let options = tessellation::FillOptions::default()

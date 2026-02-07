@@ -259,7 +259,7 @@ impl<Message> canvas::Program<Message> for CustomCanvas {
                 );*/
                 let base_path = Path::rounded_rectangle(
                     Point::new(25., 25.),
-                    Size::new(200., 200.),
+                    Size::new(150., 150.),
                     Radius::new(4.),
                 );
                 let flat_base_path = FlattenedPath::from_path(&base_path);
@@ -270,8 +270,8 @@ impl<Message> canvas::Program<Message> for CustomCanvas {
                 });
                 let path = dashed.delta(2.);
                 let path = path.clip(Some(&flat_base_path),Some(0.),None).to_iced_path();
-                frame.fill(&base_path, Color::from_rgba8(255,255,255,0.2));
-                //frame.fill(&path, Color::BLACK);
+                //frame.fill(&base_path, Color::from_rgba8(255,255,255,0.2));
+                frame.fill(&path, Color::WHITE);
             },
             true,
             _style.scale_factor_for_aa,
