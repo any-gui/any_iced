@@ -352,20 +352,20 @@ impl Rectangle<f32> {
     ///
     /// The conversion flips the `y` axis to match NDC's upward direction.
     pub fn rect_to_ndc(
-        rect: Rectangle<f32>,
+        &self,
         screen_size: Size,
     ) -> [f32; 4] {
         let a = screen_size.width;
         let b = screen_size.height;
 
-        let cx = rect.x + rect.width * 0.5;
-        let cy = rect.y + rect.height * 0.5;
+        let cx = self.x + self.width * 0.5;
+        let cy = self.y + self.height * 0.5;
 
         let center_x = cx / a * 2.0 - 1.0;
         let center_y = 1.0 - cy / b * 2.0;
 
-        let width_ndc = rect.width / a * 2.0;
-        let height_ndc = rect.height / b * 2.0;
+        let width_ndc = self.width / a * 2.0;
+        let height_ndc = self.height / b * 2.0;
 
         [center_x, center_y, width_ndc, height_ndc]
     }
