@@ -796,7 +796,7 @@ impl Transform {
     }
 }
 pub struct GradientVertex2DBuilder {
-    gradient: gradient::Packed,
+    pub gradient: gradient::Packed,
 }
 
 impl tessellation::FillVertexConstructor<mesh::GradientVertex2D>
