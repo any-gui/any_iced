@@ -795,7 +795,7 @@ impl Transform {
         Rectangle::with_vertices(top_left, top_right, bottom_left)
     }
 }
-struct GradientVertex2DBuilder {
+pub struct GradientVertex2DBuilder {
     gradient: gradient::Packed,
 }
 
@@ -833,7 +833,7 @@ impl tessellation::StrokeVertexConstructor<mesh::GradientVertex2D>
     }
 }
 
-struct TriangleVertex2DBuilder(color::Packed);
+pub struct TriangleVertex2DBuilder(color::Packed);
 
 impl tessellation::FillVertexConstructor<mesh::SolidVertex2D>
     for TriangleVertex2DBuilder
