@@ -833,7 +833,7 @@ impl tessellation::StrokeVertexConstructor<mesh::GradientVertex2D>
     }
 }
 
-pub struct TriangleVertex2DBuilder(color::Packed);
+pub struct TriangleVertex2DBuilder(pub color::Packed);
 
 impl tessellation::FillVertexConstructor<mesh::SolidVertex2D>
     for TriangleVertex2DBuilder
