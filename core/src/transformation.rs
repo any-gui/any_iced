@@ -31,6 +31,11 @@ impl Transformation {
         Self(Mat4::from_scale(Vec3::new(scaling, scaling, 1.0)))
     }
 
+    /// Creates a nonuniform scaling transformation.
+    pub fn scale_xy(scaling_x: f32,scaling_y: f32) -> Self {
+        Self(Mat4::from_scale(Vec3::new(scaling_x, scaling_y, 1.0)))
+    }
+
     /// Returns the inverse of the [`Transformation`].
     pub fn inverse(self) -> Self {
         Self(self.0.inverse())
