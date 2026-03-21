@@ -621,7 +621,7 @@ impl Layer {
 
 #[repr(C)]
 #[derive(Debug, Clone, Copy, Zeroable, Pod)]
-struct Instance {
+pub struct Instance {
     _center: [f32; 2],
     _clip_bounds: [f32; 4],
     _border_radius: [f32; 4],
@@ -648,7 +648,7 @@ struct Uniforms {
     _padding: [f32; 3],
 }
 
-fn add_instances(
+pub fn add_instances(
     bounds: Rectangle,
     clip_bounds: Rectangle,
     border_radius: border::Radius,
