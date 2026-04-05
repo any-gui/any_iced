@@ -47,6 +47,7 @@ pub mod image;
 #[cfg(not(any(feature = "image", feature = "svg")))]
 #[path = "image/null.rs"]
 mod image;
+mod offscreen;
 
 pub use buffer::Buffer;
 
@@ -55,7 +56,7 @@ pub use iced_graphics as graphics;
 pub use iced_graphics::core;
 
 pub use wgpu;
-
+use wgpu::TextureView;
 pub use engine::Engine;
 pub use layer::Layer;
 pub use primitive::Primitive;
@@ -63,13 +64,13 @@ pub use settings::Settings;
 
 #[cfg(feature = "geometry")]
 pub use geometry::Geometry;
-use iced_graphics::geometry::Path;
 use crate::core::renderer;
 use crate::core::{
     Background, Color, Font, Pixels, Point, Rectangle, Size, Transformation,
 };
 use crate::graphics::text::{Editor, Paragraph};
 use crate::graphics::{Shell, Viewport};
+use crate::offscreen::OffscreenState;
 
 /// A [`wgpu`] graphics renderer for [`iced`].
 ///
@@ -95,6 +96,9 @@ pub struct Renderer {
     image_cache: std::cell::RefCell<image::Cache>,
 
     staging_belt: wgpu::util::StagingBelt,
+
+    offscreen_stage: OffscreenState,
+    use_offscreen_texture: bool,
 }
 
 impl Renderer {
@@ -130,6 +134,8 @@ impl Renderer {
             ),
 
             engine,
+            use_offscreen_texture: false,
+            offscreen_stage: OffscreenState::Empty,
         }
     }
 
@@ -367,10 +373,12 @@ impl Renderer {
 
                 #[cfg(any(feature = "image", feature = "svg"))]
                 let mut image_cache = self.image_cache.borrow_mut();
-
+                let mut use_offscreen_texture = false;
                 for instance in &layer.primitives {
                     #[cfg(any(feature = "image", feature = "svg"))]
                     {
+                        // check if you should use offscreen texture
+                        use_offscreen_texture = instance.primitive.should_use_offscreen_texture();
                         // 检查是否是 image primitive
                         if instance.primitive.is_custom_primitive() {
                             instance.primitive.prepare_custom_primitive(
@@ -397,6 +405,18 @@ impl Renderer {
                         &instance.bounds,
                         viewport,
                     );
+                }
+
+                if use_offscreen_texture {
+                    self.offscreen_stage.ensure(
+                        &self.engine.device,
+                        encoder,
+                        &mut self.staging_belt,
+                        self.engine.format,
+                        viewport.physical_size().width,
+                        viewport.physical_size().height,
+                    );
+                    self.use_offscreen_texture = true;
                 }
 
                 prepare_span.finish();
@@ -442,12 +462,23 @@ impl Renderer {
     fn render(
         &mut self,
         encoder: &mut wgpu::CommandEncoder,
-        frame: &wgpu::TextureView,
+        main_frame: &wgpu::TextureView,
         clear_color: Option<Color>,
         viewport: &Viewport,
     ) {
         use std::mem::ManuallyDrop;
-
+        let frame= if self.use_offscreen_texture {
+            match self.offscreen_stage.get_texture_view() {
+                None => {
+                    main_frame
+                }
+                Some(f) => {
+                    f
+                }
+            }
+        } else {
+            main_frame
+        };
         let mut render_pass = ManuallyDrop::new(encoder.begin_render_pass(
             &wgpu::RenderPassDescriptor {
                 label: Some("iced_wgpu render pass"),
@@ -555,6 +586,11 @@ impl Renderer {
                 ));
             }
 
+            let offscreen_target_bind_group = if self.use_offscreen_texture {
+                self.offscreen_stage.get_screen_target_bind_group()
+            } else {
+                None
+            };
             if !layer.primitives.is_empty() {
                 let render_span = debug::render(debug::Primitive::Shader);
 
@@ -630,6 +666,7 @@ impl Renderer {
                                     &primitive_storage,
                                     encoder,
                                     frame,
+                                    offscreen_target_bind_group,
                                     &clip_bounds,
                                     &image_cache,
                                 );
@@ -771,6 +808,7 @@ impl Renderer {
                                     &primitive_storage,
                                     encoder,
                                     frame,
+                                    offscreen_target_bind_group,
                                     &clip_bounds,
                                     &image_cache,
                                 );
@@ -805,6 +843,47 @@ impl Renderer {
         }
 
         let _ = ManuallyDrop::into_inner(render_pass);
+
+        // If use offscreen texture. Should blit to main buffer
+        if self.use_offscreen_texture {
+            //Create Render Pass
+            let mut render_pass = ManuallyDrop::new(encoder.begin_render_pass(
+                &wgpu::RenderPassDescriptor {
+                    label: Some("iced_wgpu render pass"),
+                    color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                        view: main_frame,
+                        depth_slice: None,
+                        resolve_target: None,
+                        ops: wgpu::Operations {
+                            load: match clear_color {
+                                Some(background_color) => wgpu::LoadOp::Clear({
+                                    let [r, g, b, a] =
+                                        graphics::color::pack(background_color)
+                                            .components();
+
+                                    wgpu::Color {
+                                        r: f64::from(r),
+                                        g: f64::from(g),
+                                        b: f64::from(b),
+                                        a: f64::from(a),
+                                    }
+                                }),
+                                None => wgpu::LoadOp::Load,
+                            },
+                            store: wgpu::StoreOp::Store,
+                        },
+                    })],
+                    depth_stencil_attachment: None,
+                    timestamp_writes: None,
+                    occlusion_query_set: None,
+                },
+            ));
+            //Blit
+            self.offscreen_stage.render(
+
+            );
+            let _ = ManuallyDrop::into_inner(render_pass);
+        }
 
         debug::layers_rendered(|| {
             self.layers

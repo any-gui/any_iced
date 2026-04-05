@@ -75,6 +75,11 @@ pub trait Primitive: Debug + MaybeSend + MaybeSync + 'static {
         false
     }
 
+    /// Returns `true` if this [`Primitive`] Sampler From Screen Texture.
+    fn should_use_offscreen_texture(&self) -> bool {
+        false
+    }
+
     /// Prepares an image primitive with access to the image cache.
     ///
     /// This is only called if `is_image_primitive()` returns `true`.
@@ -116,6 +121,7 @@ pub trait Primitive: Debug + MaybeSend + MaybeSync + 'static {
         pipeline: &Self::Pipeline,
         encoder: &mut wgpu::CommandEncoder,
         target: &wgpu::TextureView,
+        target_bind_group: Option<&wgpu::BindGroup>,
         clip_bounds: &Rectangle<u32>,
         _cache: &crate::image::Cache,
     ) {
@@ -128,6 +134,7 @@ pub trait Primitive: Debug + MaybeSend + MaybeSync + 'static {
         pipeline: &Self::Pipeline,
         encoder: &mut wgpu::CommandEncoder,
         target: &wgpu::TextureView,
+        target_bind_group: Option<&wgpu::BindGroup>,
         clip_bounds: &Rectangle<u32>,
         _cache: &crate::image::Cache,
     ) {
@@ -199,6 +206,10 @@ pub(crate) trait Stored:
         false
     }
 
+    fn should_use_offscreen_texture(&self) -> bool {
+        false
+    }
+
     #[cfg(any(feature = "image", feature = "svg"))]
     fn prepare_custom_primitive(
         &self,
@@ -220,6 +231,7 @@ pub(crate) trait Stored:
         storage: &Storage,
         encoder: &mut wgpu::CommandEncoder,
         target: &wgpu::TextureView,
+        target_bind_group: &wgpu::BindGroup,
         clip_bounds: &Rectangle<u32>,
         cache: &crate::image::Cache,
     );
@@ -230,6 +242,7 @@ pub(crate) trait Stored:
         storage: &Storage,
         encoder: &mut wgpu::CommandEncoder,
         target: &wgpu::TextureView,
+        target_bind_group: Option<&wgpu::BindGroup>,
         clip_bounds: &Rectangle<u32>,
         cache: &crate::image::Cache,
     );
@@ -240,6 +253,7 @@ pub(crate) trait Stored:
         storage: &Storage,
         encoder: &mut wgpu::CommandEncoder,
         target: &wgpu::TextureView,
+        target_bind_group: Option<&wgpu::BindGroup>,
         clip_bounds: &Rectangle<u32>,
         cache: &crate::image::Cache,
     );
@@ -305,9 +319,11 @@ impl<P: Primitive> Stored for BlackBox<P> {
             .render(renderer, encoder, target, clip_bounds);
     }
 
-    #[cfg(any(feature = "image", feature = "svg"))]
     fn is_custom_primitive(&self) -> bool {
         self.primitive.is_custom_primitive()
+    }
+    fn should_use_offscreen_texture(&self) -> bool {
+        self.primitive.should_use_offscreen_texture()
     }
 
     #[cfg(any(feature = "image", feature = "svg"))]
@@ -352,6 +368,7 @@ impl<P: Primitive> Stored for BlackBox<P> {
         storage: &Storage,
         encoder: &mut wgpu::CommandEncoder,
         target: &wgpu::TextureView,
+        target_bind_group: &wgpu::BindGroup,
         clip_bounds: &Rectangle<u32>,
         cache: &crate::image::Cache,
     ) {
@@ -379,6 +396,7 @@ impl<P: Primitive> Stored for BlackBox<P> {
         storage: &Storage,
         encoder: &mut wgpu::CommandEncoder,
         target: &wgpu::TextureView,
+        target_bind_group: Option<&wgpu::BindGroup>,
         clip_bounds: &Rectangle<u32>,
         cache: &crate::image::Cache,
     ) {
@@ -395,6 +413,7 @@ impl<P: Primitive> Stored for BlackBox<P> {
             renderer,
             encoder,
             target,
+            target_bind_group,
             clip_bounds,
             cache,
         );
@@ -406,6 +425,7 @@ impl<P: Primitive> Stored for BlackBox<P> {
         storage: &Storage,
         encoder: &mut wgpu::CommandEncoder,
         target: &wgpu::TextureView,
+        target_bind_group: Option<&wgpu::BindGroup>,
         clip_bounds: &Rectangle<u32>,
         cache: &crate::image::Cache,
     ) {
@@ -422,6 +442,7 @@ impl<P: Primitive> Stored for BlackBox<P> {
             renderer,
             encoder,
             target,
+            target_bind_group,
             clip_bounds,
             cache,
         );

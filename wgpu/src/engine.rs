@@ -5,7 +5,6 @@ use crate::text;
 use crate::triangle;
 
 use std::sync::{Arc, RwLock};
-
 #[derive(Clone)]
 pub struct Engine {
     pub(crate) device: wgpu::Device,
@@ -35,7 +34,7 @@ impl Engine {
         let backend = _adapter.get_info().backend;
         Self {
             format,
-
+            
             quad_pipeline: quad::Pipeline::new(&device, format),
             text_pipeline: text::Pipeline::new(&device, &queue, format),
             triangle_pipeline: triangle::Pipeline::new(
