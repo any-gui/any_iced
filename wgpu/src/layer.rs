@@ -24,6 +24,9 @@ pub struct Layer {
     pub text: text::Batch,
     pending_meshes: Vec<Mesh>,
     pending_text: Vec<Text>,
+    //render to a offscreen texture. so you can
+    //add layer level effect like: layer blur.
+    pub render_independent: bool,
 }
 
 impl Layer {
@@ -296,6 +299,10 @@ impl Layer {
             });
         }
     }
+
+    fn render_independent(&mut self) {
+        self.render_independent = true;
+    }
 }
 
 impl graphics::Layer for Layer {
@@ -399,6 +406,7 @@ impl Default for Layer {
             images: image::Batch::default(),
             pending_meshes: Vec::new(),
             pending_text: Vec::new(),
+            render_independent: false,
         }
     }
 }

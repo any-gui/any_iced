@@ -80,6 +80,12 @@ pub trait Primitive: Debug + MaybeSend + MaybeSync + 'static {
         false
     }
 
+    /// Returns `true` if this [`Primitive`]
+    /// Use Offscreen Texture For layer, like layer blur.
+    fn should_use_offscreen_layer(&self) -> bool {
+        false
+    }
+
     /// Prepares an image primitive with access to the image cache.
     ///
     /// This is only called if `is_image_primitive()` returns `true`.
@@ -210,6 +216,10 @@ pub(crate) trait Stored:
         false
     }
 
+    fn should_use_offscreen_layer(&self) -> bool {
+        false
+    }
+
     #[cfg(any(feature = "image", feature = "svg"))]
     fn prepare_custom_primitive(
         &self,
@@ -324,6 +334,10 @@ impl<P: Primitive> Stored for BlackBox<P> {
     }
     fn should_use_offscreen_texture(&self) -> bool {
         self.primitive.should_use_offscreen_texture()
+    }
+
+    fn should_use_offscreen_layer(&self) -> bool {
+        self.primitive.should_use_offscreen_layer()
     }
 
     #[cfg(any(feature = "image", feature = "svg"))]
@@ -444,7 +458,7 @@ impl<P: Primitive> Stored for BlackBox<P> {
             target,
             target_bind_group,
             clip_bounds,
-            cache,
+            cache
         );
     }
 }

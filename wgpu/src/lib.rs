@@ -107,6 +107,10 @@ impl Renderer {
         default_font: Font,
         default_text_size: Pixels,
     ) -> Self {
+        let offscreen_stage = OffscreenState::new(
+            &engine.device,
+            engine.format
+        );
         Self {
             default_font,
             default_text_size,
@@ -135,7 +139,7 @@ impl Renderer {
 
             engine,
             use_offscreen_texture: false,
-            offscreen_stage: OffscreenState::Empty,
+            offscreen_stage,
         }
     }
 
@@ -319,7 +323,13 @@ impl Renderer {
 
         self.layers.merge();
 
-        for layer in self.layers.iter() {
+
+        //clear layer index
+        self.offscreen_stage.clear();
+        self.use_offscreen_texture = false;
+        let mut use_offscreen_texture = false;
+        for (index,layer) in self.layers.iter().enumerate() {
+            let mut layer_use_offscreen_texture = false;
             let clip_bounds = layer.bounds * scale_factor;
 
             if physical_bounds
@@ -373,12 +383,12 @@ impl Renderer {
 
                 #[cfg(any(feature = "image", feature = "svg"))]
                 let mut image_cache = self.image_cache.borrow_mut();
-                let mut use_offscreen_texture = false;
                 for instance in &layer.primitives {
                     #[cfg(any(feature = "image", feature = "svg"))]
                     {
                         // check if you should use offscreen texture
                         use_offscreen_texture = instance.primitive.should_use_offscreen_texture();
+                        layer_use_offscreen_texture = instance.primitive.should_use_offscreen_layer();
                         // 检查是否是 image primitive
                         if instance.primitive.is_custom_primitive() {
                             instance.primitive.prepare_custom_primitive(
@@ -405,18 +415,6 @@ impl Renderer {
                         &instance.bounds,
                         viewport,
                     );
-                }
-
-                if use_offscreen_texture {
-                    self.offscreen_stage.ensure(
-                        &self.engine.device,
-                        encoder,
-                        &mut self.staging_belt,
-                        self.engine.format,
-                        viewport.physical_size().width,
-                        viewport.physical_size().height,
-                    );
-                    self.use_offscreen_texture = true;
                 }
 
                 prepare_span.finish();
@@ -456,6 +454,28 @@ impl Renderer {
 
                 prepare_span.finish();
             }
+            if layer_use_offscreen_texture {
+                self.offscreen_stage.ensure_layer(
+                    &self.engine.device,
+                    encoder,
+                    &mut self.staging_belt,
+                    self.engine.format,
+                    viewport.physical_size().width,
+                    viewport.physical_size().height,
+                    index
+                );
+            }
+        }
+        if use_offscreen_texture {
+            self.offscreen_stage.ensure_frame(
+                &self.engine.device,
+                encoder,
+                &mut self.staging_belt,
+                self.engine.format,
+                viewport.physical_size().width,
+                viewport.physical_size().height,
+            );
+            self.use_offscreen_texture = true;
         }
     }
 
@@ -468,7 +488,7 @@ impl Renderer {
     ) {
         use std::mem::ManuallyDrop;
         let frame= if self.use_offscreen_texture {
-            match self.offscreen_stage.get_texture_view() {
+            match self.offscreen_stage.get_screen_texture_view() {
                 None => {
                     main_frame
                 }
@@ -525,7 +545,31 @@ impl Renderer {
 
         let scale = Transformation::scale(scale_factor);
 
-        for layer in self.layers.iter() {
+        let frame_use_offscreen_texture = self.use_offscreen_texture;
+        for (index,layer) in self.layers.iter().enumerate() {
+            // Check if should render to offscreen layer
+            let layer_use_offscreen_texture = self.offscreen_stage.is_layer_use_offscreen(index);
+            if self.offscreen_stage.is_layer_use_offscreen(index) {
+                render_pass = ManuallyDrop::new(encoder.begin_render_pass(
+                    &wgpu::RenderPassDescriptor {
+                        label: Some("iced_wgpu render pass"),
+                        color_attachments: &[Some(
+                            wgpu::RenderPassColorAttachment {
+                                view: frame,
+                                depth_slice: None,
+                                resolve_target: None,
+                                ops: wgpu::Operations {
+                                    load: wgpu::LoadOp::Load,
+                                    store: wgpu::StoreOp::Store,
+                                },
+                            },
+                        )],
+                        depth_stencil_attachment: None,
+                        timestamp_writes: None,
+                        occlusion_query_set: None,
+                    },
+                ));
+            }
             let Some(physical_bounds) =
                 physical_bounds.intersection(&(layer.bounds * scale_factor))
             else {
@@ -879,9 +923,7 @@ impl Renderer {
                 },
             ));
             //Blit
-            self.offscreen_stage.render(
-
-            );
+            self.offscreen_stage.render_to_screen(&mut render_pass);
             let _ = ManuallyDrop::into_inner(render_pass);
         }
 
