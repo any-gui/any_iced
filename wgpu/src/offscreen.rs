@@ -1,4 +1,5 @@
 use std::collections::HashSet;
+use wgpu::{BindGroup, TextureView};
 use crate::core::Size;
 use crate::{Buffer};
 use wgpu::util::RenderEncoder;
@@ -85,6 +86,15 @@ impl OffscreenState {
     ) {
         self.layer_index_map.clear();
     }
+
+    pub(crate) fn is_layer_use_offscreen(&self, layer_index: usize) -> Option<(&wgpu::TextureView, &wgpu::BindGroup)> {
+        let layer_use_offscreen = self.layer_index_map.contains(&layer_index);
+        if layer_use_offscreen {
+            self.get_layer_texture_view_bind_group()
+        } else {
+            None
+        }
+    }
     pub(crate) fn ensure_frame(
         &mut self,
         device: &wgpu::Device,
@@ -102,7 +112,7 @@ impl OffscreenState {
             height,
         );
         let buffer_size = self.screen_target.get_buffer_size();
-        let window_size = self.window_size;
+        let window_size = Size::new(width, height);
         if let Some(size) = buffer_size {
             if self.window_size.width != width || self.window_size.height != height {
                 self.prepare_uniform(
@@ -147,20 +157,20 @@ impl OffscreenState {
                 )
             }
         }
-        self.layer_index_map.insert(index);
+        let _ = self.layer_index_map.insert(index);
     }
 
-    pub(crate) fn get_screen_texture_view(&self) -> Option<&wgpu::TextureView> {
+    pub(crate) fn get_screen_texture_view_bind_group(&self) -> Option<(&wgpu::TextureView, &wgpu::BindGroup)> {
         match &self.screen_target {
             OffscreenTexture::Empty => None,
-            OffscreenTexture::Ready(r) => Some(&r.texture_view),
+            OffscreenTexture::Ready(r) => Some((&r.texture_view,&r.texture_bind_group)),
         }
     }
 
-    pub(crate) fn get_layer_texture_view(&self) -> Option<&wgpu::TextureView> {
+    pub(crate) fn get_layer_texture_view_bind_group(&self) -> Option<(&wgpu::TextureView, &wgpu::BindGroup)> {
         match &self.layer_target {
             OffscreenTexture::Empty => None,
-            OffscreenTexture::Ready(r) => Some(&r.texture_view),
+            OffscreenTexture::Ready(r) => Some((&r.texture_view,&r.texture_bind_group)),
         }
     }
 
@@ -265,7 +275,7 @@ impl OffscreenState {
             window_size.width as f32 / buffer_size.width as f32,
             window_size.height as f32 / buffer_size.height as f32,
         );
-        self.uniform_buffer.write(
+        let _ = self.uniform_buffer.write(
             device,
             encoder,
             belt,

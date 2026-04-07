@@ -27,7 +27,6 @@ pub use settings::Settings;
 
 #[cfg(feature = "geometry")]
 pub use geometry::Geometry;
-use iced_graphics::geometry::Path;
 use crate::core::renderer;
 use crate::core::{
     Background, Color, Font, Pixels, Point, Rectangle, Size, Transformation,

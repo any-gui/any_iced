@@ -253,6 +253,7 @@ impl State {
         batch: &Batch,
         bounds: Rectangle,
         screen_transformation: Transformation,
+        viewport_size: Size<u32>,
     ) -> usize {
         let mut layer_count = 0;
 
@@ -292,6 +293,7 @@ impl State {
             &pipeline.gradient,
             bounds,
             items,
+            viewport_size
         );
 
         layer_count
@@ -326,12 +328,13 @@ fn render<'a>(
     gradient: &gradient::Pipeline,
     bounds: Rectangle,
     group: impl Iterator<Item = (&'a Layer, &'a [Mesh], Transformation)>,
+    viewport_size: Size<u32>,
 ) {
     {
         let mut render_pass = if let Some((_state, pipeline)) = &mut msaa {
             pipeline.render_pass(encoder)
         } else {
-            encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+            let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
                 label: Some("iced_wgpu.triangle.render_pass"),
                 color_attachments: &[Some(wgpu::RenderPassColorAttachment {
                     view: target,
@@ -345,7 +348,16 @@ fn render<'a>(
                 depth_stencil_attachment: None,
                 timestamp_writes: None,
                 occlusion_query_set: None,
-            })
+            });
+            pass.set_viewport(
+                0.,
+                0.,
+                viewport_size.width as f32,
+                viewport_size.height as f32,
+                0.0,
+                1.0,
+            );
+            pass
         };
 
         for (layer, meshes, transformation) in group {
@@ -361,7 +373,7 @@ fn render<'a>(
     }
 
     if let Some((state, pipeline)) = msaa {
-        state.render(pipeline, encoder, target);
+        state.render(pipeline, encoder, target, viewport_size);
     }
 }
 

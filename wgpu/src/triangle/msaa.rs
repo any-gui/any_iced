@@ -339,6 +339,7 @@ impl State {
         pipeline: &Pipeline,
         encoder: &mut wgpu::CommandEncoder,
         target: &wgpu::TextureView,
+        viewport_size: Size<u32>,
     ) {
         let mut render_pass =
             encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
@@ -356,6 +357,15 @@ impl State {
                 timestamp_writes: None,
                 occlusion_query_set: None,
             });
+
+        render_pass.set_viewport(
+            0.,
+            0.,
+            viewport_size.width as f32,
+            viewport_size.height as f32,
+            0.0,
+            1.0,
+        );
 
         render_pass.set_pipeline(&pipeline.raw);
         render_pass.set_bind_group(0, &self.constants, &[]);

@@ -30,6 +30,7 @@ pub mod window;
 #[cfg(feature = "geometry")]
 pub mod geometry;
 
+use std::mem::ManuallyDrop;
 #[cfg(feature = "geometry")]
 pub use lyon;
 
@@ -56,7 +57,7 @@ pub use iced_graphics as graphics;
 pub use iced_graphics::core;
 
 pub use wgpu;
-use wgpu::TextureView;
+use wgpu::{BindGroup, LoadOp, TextureView};
 pub use engine::Engine;
 pub use layer::Layer;
 pub use primitive::Primitive;
@@ -487,49 +488,39 @@ impl Renderer {
         viewport: &Viewport,
     ) {
         use std::mem::ManuallyDrop;
-        let frame= if self.use_offscreen_texture {
-            match self.offscreen_stage.get_screen_texture_view() {
-                None => {
-                    main_frame
+        let clear_color = match clear_color {
+            Some(background_color) => wgpu::LoadOp::Clear({
+                let [r, g, b, a] =
+                    graphics::color::pack(background_color)
+                        .components();
+
+                wgpu::Color {
+                    r: f64::from(r),
+                    g: f64::from(g),
+                    b: f64::from(b),
+                    a: f64::from(a),
                 }
-                Some(f) => {
-                    f
+            }),
+            None => wgpu::LoadOp::Load,
+        };
+        let (frame,wgpu_clear_color)= if self.use_offscreen_texture {
+            match self.offscreen_stage.get_screen_texture_view_bind_group() {
+                None => {
+                    (main_frame,clear_color)
+                }
+                Some((screen_texture,screen_bg)) => {
+                    (screen_texture,wgpu::LoadOp::Clear(wgpu::Color::TRANSPARENT))
                 }
             }
         } else {
-            main_frame
+            (main_frame,clear_color)
         };
-        let mut render_pass = ManuallyDrop::new(encoder.begin_render_pass(
-            &wgpu::RenderPassDescriptor {
-                label: Some("iced_wgpu render pass"),
-                color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-                    view: frame,
-                    depth_slice: None,
-                    resolve_target: None,
-                    ops: wgpu::Operations {
-                        load: match clear_color {
-                            Some(background_color) => wgpu::LoadOp::Clear({
-                                let [r, g, b, a] =
-                                    graphics::color::pack(background_color)
-                                        .components();
-
-                                wgpu::Color {
-                                    r: f64::from(r),
-                                    g: f64::from(g),
-                                    b: f64::from(b),
-                                    a: f64::from(a),
-                                }
-                            }),
-                            None => wgpu::LoadOp::Load,
-                        },
-                        store: wgpu::StoreOp::Store,
-                    },
-                })],
-                depth_stencil_attachment: None,
-                timestamp_writes: None,
-                occlusion_query_set: None,
-            },
-        ));
+        let mut render_pass = new_render_pass(
+            encoder,
+            viewport.physical_size(),
+            frame,
+            wgpu_clear_color,
+        );
 
         let mut quad_layer = 0;
         let mut mesh_layer = 0;
@@ -545,31 +536,30 @@ impl Renderer {
 
         let scale = Transformation::scale(scale_factor);
 
-        let frame_use_offscreen_texture = self.use_offscreen_texture;
         for (index,layer) in self.layers.iter().enumerate() {
             // Check if should render to offscreen layer
-            let layer_use_offscreen_texture = self.offscreen_stage.is_layer_use_offscreen(index);
-            if self.offscreen_stage.is_layer_use_offscreen(index) {
-                render_pass = ManuallyDrop::new(encoder.begin_render_pass(
-                    &wgpu::RenderPassDescriptor {
-                        label: Some("iced_wgpu render pass"),
-                        color_attachments: &[Some(
-                            wgpu::RenderPassColorAttachment {
-                                view: frame,
-                                depth_slice: None,
-                                resolve_target: None,
-                                ops: wgpu::Operations {
-                                    load: wgpu::LoadOp::Load,
-                                    store: wgpu::StoreOp::Store,
-                                },
-                            },
-                        )],
-                        depth_stencil_attachment: None,
-                        timestamp_writes: None,
-                        occlusion_query_set: None,
-                    },
-                ));
-            }
+            let layer_view_bg = self.offscreen_stage.is_layer_use_offscreen(index);
+            let layer_use_offscreen_texture = layer_view_bg.is_some();
+            let (layer_frame,offscreen_bind_group) = match layer_view_bg {
+                None => {
+                    let bg = match self.offscreen_stage.get_screen_texture_view_bind_group() {
+                        None => { None }
+                        Some((v,bg)) => {Some(bg)}
+                    };
+                    (frame,bg)
+                }
+                Some((layer_view,layer_bg)) => {
+                    //Drop Main render pass, Begin layer render pass
+                    let _ = ManuallyDrop::into_inner(render_pass);
+                    render_pass = new_render_pass(
+                        encoder,
+                        viewport.physical_size(),
+                        layer_view,
+                        wgpu::LoadOp::Clear(wgpu::Color::TRANSPARENT)
+                    );
+                    (layer_view,Some(layer_bg))
+                }
+            };
             let Some(physical_bounds) =
                 physical_bounds.intersection(&(layer.bounds * scale_factor))
             else {
@@ -606,35 +596,18 @@ impl Renderer {
                     &layer.triangles,
                     physical_bounds,
                     scale,
+                    viewport.physical_size()
                 );
                 render_span.finish();
 
-                render_pass = ManuallyDrop::new(encoder.begin_render_pass(
-                    &wgpu::RenderPassDescriptor {
-                        label: Some("iced_wgpu render pass"),
-                        color_attachments: &[Some(
-                            wgpu::RenderPassColorAttachment {
-                                view: frame,
-                                depth_slice: None,
-                                resolve_target: None,
-                                ops: wgpu::Operations {
-                                    load: wgpu::LoadOp::Load,
-                                    store: wgpu::StoreOp::Store,
-                                },
-                            },
-                        )],
-                        depth_stencil_attachment: None,
-                        timestamp_writes: None,
-                        occlusion_query_set: None,
-                    },
-                ));
+                render_pass = new_render_pass(
+                    encoder,
+                    viewport.physical_size(),
+                    layer_frame,
+                    wgpu::LoadOp::Load
+                );
             }
 
-            let offscreen_target_bind_group = if self.use_offscreen_texture {
-                self.offscreen_stage.get_screen_target_bind_group()
-            } else {
-                None
-            };
             if !layer.primitives.is_empty() {
                 let render_span = debug::render(debug::Primitive::Shader);
 
@@ -710,7 +683,7 @@ impl Renderer {
                                     &primitive_storage,
                                     encoder,
                                     frame,
-                                    offscreen_target_bind_group,
+                                    offscreen_bind_group,
                                     &clip_bounds,
                                     &image_cache,
                                 );
@@ -726,25 +699,12 @@ impl Renderer {
                         );
                     }
 
-                    render_pass = ManuallyDrop::new(encoder.begin_render_pass(
-                        &wgpu::RenderPassDescriptor {
-                            label: Some("iced_wgpu render pass"),
-                            color_attachments: &[Some(
-                                wgpu::RenderPassColorAttachment {
-                                    view: frame,
-                                    depth_slice: None,
-                                    resolve_target: None,
-                                    ops: wgpu::Operations {
-                                        load: wgpu::LoadOp::Load,
-                                        store: wgpu::StoreOp::Store,
-                                    },
-                                },
-                            )],
-                            depth_stencil_attachment: None,
-                            timestamp_writes: None,
-                            occlusion_query_set: None,
-                        },
-                    ));
+                    render_pass = new_render_pass(
+                        encoder,
+                        viewport.physical_size(),
+                        layer_frame,
+                        LoadOp::Load
+                    );
                 }
 
                 render_span.finish();
@@ -852,7 +812,7 @@ impl Renderer {
                                     &primitive_storage,
                                     encoder,
                                     frame,
-                                    offscreen_target_bind_group,
+                                    offscreen_bind_group,
                                     &clip_bounds,
                                     &image_cache,
                                 );
@@ -860,29 +820,27 @@ impl Renderer {
                             }
                         }
                     }
-
-                    render_pass = ManuallyDrop::new(encoder.begin_render_pass(
-                        &wgpu::RenderPassDescriptor {
-                            label: Some("iced_wgpu render pass"),
-                            color_attachments: &[Some(
-                                wgpu::RenderPassColorAttachment {
-                                    view: frame,
-                                    depth_slice: None,
-                                    resolve_target: None,
-                                    ops: wgpu::Operations {
-                                        load: wgpu::LoadOp::Load,
-                                        store: wgpu::StoreOp::Store,
-                                    },
-                                },
-                            )],
-                            depth_stencil_attachment: None,
-                            timestamp_writes: None,
-                            occlusion_query_set: None,
-                        },
-                    ));
+                    render_pass = new_render_pass(
+                        encoder,
+                        viewport.physical_size(),
+                        layer_frame,
+                        LoadOp::Load
+                    );
                 }
 
                 render_span.finish();
+            }
+            // Check if use layer offscreen, should blit to main frame
+            if layer_use_offscreen_texture {
+                //Begin main render pass
+                let _ = ManuallyDrop::into_inner(render_pass);
+                render_pass = new_render_pass(
+                    encoder,
+                    viewport.physical_size(),
+                    frame,
+                    wgpu::LoadOp::Load
+                );
+                self.offscreen_stage.render_to_layer(&mut render_pass);
             }
         }
 
@@ -899,21 +857,7 @@ impl Renderer {
                         depth_slice: None,
                         resolve_target: None,
                         ops: wgpu::Operations {
-                            load: match clear_color {
-                                Some(background_color) => wgpu::LoadOp::Clear({
-                                    let [r, g, b, a] =
-                                        graphics::color::pack(background_color)
-                                            .components();
-
-                                    wgpu::Color {
-                                        r: f64::from(r),
-                                        g: f64::from(g),
-                                        b: f64::from(b),
-                                        a: f64::from(a),
-                                    }
-                                }),
-                                None => wgpu::LoadOp::Load,
-                            },
+                            load: clear_color,
                             store: wgpu::StoreOp::Store,
                         },
                     })],
@@ -1251,4 +1195,41 @@ impl renderer::Headless for Renderer {
             background_color,
         )
     }
+}
+
+fn new_render_pass<'a>(
+    encoder: &'a mut wgpu::CommandEncoder,
+    viewport_size: Size<u32>,
+    targets: &'a wgpu::TextureView,
+    load: wgpu::LoadOp<wgpu::Color>
+) -> ManuallyDrop<wgpu::RenderPass<'a>> {
+    let mut pass = ManuallyDrop::new(encoder.begin_render_pass(
+        &wgpu::RenderPassDescriptor {
+            label: Some("iced_wgpu render pass"),
+            color_attachments: &[Some(
+                wgpu::RenderPassColorAttachment {
+                    view: targets,
+                    depth_slice: None,
+                    resolve_target: None,
+                    ops: wgpu::Operations {
+                        load,
+                        store: wgpu::StoreOp::Store,
+                    },
+                },
+            )],
+            depth_stencil_attachment: None,
+            timestamp_writes: None,
+            occlusion_query_set: None,
+        },
+    ));
+    //set viewport render pass to windows size
+    pass.set_viewport(
+        0.0,
+        0.0,
+        viewport_size.width as f32,
+        viewport_size.height as f32,
+        0.0,
+        1.0,
+    );
+    pass
 }
