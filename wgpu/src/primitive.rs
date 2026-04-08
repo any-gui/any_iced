@@ -1,11 +1,12 @@
 //! Draw custom primitives.
-use crate::core::{self, Rectangle};
+use crate::core::{self, Rectangle, Size};
 use crate::graphics::Viewport;
 use crate::graphics::futures::{MaybeSend, MaybeSync};
 
 use rustc_hash::FxHashMap;
 use std::any::{Any, TypeId};
 use std::fmt::Debug;
+use wgpu::BindGroup;
 
 /// A batch of primitives.
 pub type Batch = Vec<Instance>;
@@ -97,6 +98,8 @@ pub trait Primitive: Debug + MaybeSend + MaybeSync + 'static {
         queue: &wgpu::Queue,
         bounds: &Rectangle,
         viewport: &Viewport,
+        screen_buffer_size: Size<u32>,
+        screen_target_bind_group: Option<BindGroup>,
         cache: &mut crate::image::Cache,
         encoder: &mut wgpu::CommandEncoder,
         belt: &mut wgpu::util::StagingBelt,
@@ -229,6 +232,8 @@ pub(crate) trait Stored:
         format: wgpu::TextureFormat,
         bounds: &Rectangle,
         viewport: &Viewport,
+        screen_buffer_size: Size<u32>,
+        screen_target_bind_group: Option<BindGroup>,
         cache: &mut crate::image::Cache,
         encoder: &mut wgpu::CommandEncoder,
         belt: &mut wgpu::util::StagingBelt,
@@ -329,6 +334,7 @@ impl<P: Primitive> Stored for BlackBox<P> {
             .render(renderer, encoder, target, clip_bounds);
     }
 
+    #[cfg(any(feature = "image", feature = "svg"))]
     fn is_custom_primitive(&self) -> bool {
         self.primitive.is_custom_primitive()
     }
@@ -349,6 +355,8 @@ impl<P: Primitive> Stored for BlackBox<P> {
         format: wgpu::TextureFormat,
         bounds: &Rectangle,
         viewport: &Viewport,
+        screen_buffer_size: Size<u32>,
+        screen_target_bind_group: Option<BindGroup>,
         cache: &mut crate::image::Cache,
         encoder: &mut wgpu::CommandEncoder,
         belt: &mut wgpu::util::StagingBelt,
@@ -370,6 +378,8 @@ impl<P: Primitive> Stored for BlackBox<P> {
             queue,
             bounds,
             viewport,
+            screen_buffer_size,
+            screen_target_bind_group,
             cache,
             encoder,
             belt,

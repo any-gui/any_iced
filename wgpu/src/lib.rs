@@ -329,8 +329,52 @@ impl Renderer {
         self.offscreen_stage.clear();
         self.use_offscreen_texture = false;
         let mut use_offscreen_texture = false;
+        //loop layer and prepare custom primitive
         for (index,layer) in self.layers.iter().enumerate() {
             let mut layer_use_offscreen_texture = false;
+            for instance in &layer.primitives {
+                {
+                    // check if you should use offscreen texture
+                    if instance.primitive.should_use_offscreen_texture() {
+                        use_offscreen_texture = true;
+                    }
+                    if instance.primitive.should_use_offscreen_layer() {
+                        layer_use_offscreen_texture = true;
+                    }
+                }
+            }
+
+            if layer_use_offscreen_texture {
+                self.offscreen_stage.ensure_layer(
+                    &self.engine.device,
+                    encoder,
+                    &mut self.staging_belt,
+                    self.engine.format,
+                    viewport.physical_size().width,
+                    viewport.physical_size().height,
+                    index
+                );
+            }
+        }
+
+        if use_offscreen_texture {
+            self.offscreen_stage.ensure_frame(
+                &self.engine.device,
+                encoder,
+                &mut self.staging_belt,
+                self.engine.format,
+                viewport.physical_size().width,
+                viewport.physical_size().height,
+            );
+            self.use_offscreen_texture = true;
+        }
+
+        let offscreen_bg = if self.use_offscreen_texture {
+            self.offscreen_stage.get_screen_target_bind_group()
+        } else { None };
+        let screen_buffer_size = self.offscreen_stage.get_buffer_size().unwrap_or(viewport.physical_size());
+
+        for (index,layer) in self.layers.iter().enumerate() {
             let clip_bounds = layer.bounds * scale_factor;
 
             if physical_bounds
@@ -387,11 +431,13 @@ impl Renderer {
                 for instance in &layer.primitives {
                     #[cfg(any(feature = "image", feature = "svg"))]
                     {
-                        // check if you should use offscreen texture
-                        use_offscreen_texture = instance.primitive.should_use_offscreen_texture();
-                        layer_use_offscreen_texture = instance.primitive.should_use_offscreen_layer();
                         // 检查是否是 image primitive
                         if instance.primitive.is_custom_primitive() {
+                            let screen_bg = if instance.primitive.should_use_offscreen_layer() {
+                                self.offscreen_stage.get_layer_target_bind_group()
+                            } else {
+                                offscreen_bg.clone()
+                            };
                             instance.primitive.prepare_custom_primitive(
                                 &mut primitive_storage,
                                 &self.engine.device,
@@ -399,6 +445,8 @@ impl Renderer {
                                 self.engine.format,
                                 &instance.bounds,
                                 viewport,
+                                screen_buffer_size,
+                                screen_bg,
                                 &mut image_cache,
                                 encoder,
                                 &mut self.staging_belt,
@@ -455,28 +503,6 @@ impl Renderer {
 
                 prepare_span.finish();
             }
-            if layer_use_offscreen_texture {
-                self.offscreen_stage.ensure_layer(
-                    &self.engine.device,
-                    encoder,
-                    &mut self.staging_belt,
-                    self.engine.format,
-                    viewport.physical_size().width,
-                    viewport.physical_size().height,
-                    index
-                );
-            }
-        }
-        if use_offscreen_texture {
-            self.offscreen_stage.ensure_frame(
-                &self.engine.device,
-                encoder,
-                &mut self.staging_belt,
-                self.engine.format,
-                viewport.physical_size().width,
-                viewport.physical_size().height,
-            );
-            self.use_offscreen_texture = true;
         }
     }
 

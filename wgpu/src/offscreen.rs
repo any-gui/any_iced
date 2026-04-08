@@ -176,20 +176,26 @@ impl OffscreenState {
 
     pub(crate) fn get_screen_target_bind_group(
         &self,
-    ) -> Option<&wgpu::BindGroup> {
+    ) -> Option<wgpu::BindGroup> {
         match &self.screen_target {
             OffscreenTexture::Empty => None,
-            OffscreenTexture::Ready(r) => Some(&r.texture_bind_group),
+            OffscreenTexture::Ready(r) => Some(r.texture_bind_group.clone()),
         }
     }
 
     pub(crate) fn get_layer_target_bind_group(
         &self,
-    ) -> Option<&wgpu::BindGroup> {
+    ) -> Option<wgpu::BindGroup> {
         match &self.layer_target {
             OffscreenTexture::Empty => None,
-            OffscreenTexture::Ready(r) => Some(&r.texture_bind_group),
+            OffscreenTexture::Ready(r) => Some(r.texture_bind_group.clone()),
         }
+    }
+
+    pub(crate) fn get_buffer_size(
+        &self,
+    ) -> Option<Size<u32>> {
+        self.screen_target.get_buffer_size()
     }
 
     pub(crate) fn render_to_screen<'a>(
@@ -199,7 +205,7 @@ impl OffscreenState {
         if let Some(bd) = self.get_screen_target_bind_group() {
             render_pass.set_pipeline(&self.blit_pipeline);
             render_pass.set_bind_group(0, &self.constant_bind_group, &[]);
-            render_pass.set_bind_group(1, bd, &[]);
+            render_pass.set_bind_group(1, &bd, &[]);
             render_pass.draw(0..6, 0..1);
         }
     }
@@ -211,7 +217,7 @@ impl OffscreenState {
         if let Some(bd) = self.get_layer_target_bind_group() {
             render_pass.set_pipeline(&self.blit_pipeline);
             render_pass.set_bind_group(0, &self.constant_bind_group, &[]);
-            render_pass.set_bind_group(1, bd, &[]);
+            render_pass.set_bind_group(1, &bd, &[]);
             render_pass.draw(0..6, 0..1);
         }
     }
