@@ -99,7 +99,6 @@ pub struct Renderer {
     staging_belt: wgpu::util::StagingBelt,
 
     offscreen_stage: OffscreenState,
-    use_offscreen_texture: bool,
 }
 
 impl Renderer {
@@ -139,7 +138,6 @@ impl Renderer {
             ),
 
             engine,
-            use_offscreen_texture: false,
             offscreen_stage,
         }
     }
@@ -327,7 +325,6 @@ impl Renderer {
 
         //clear layer index
         self.offscreen_stage.clear();
-        self.use_offscreen_texture = false;
         let mut use_offscreen_texture = false;
         //loop layer and prepare custom primitive
         for (index,layer) in self.layers.iter().enumerate() {
@@ -345,34 +342,22 @@ impl Renderer {
             }
 
             if layer_use_offscreen_texture {
-                self.offscreen_stage.ensure_layer(
-                    &self.engine.device,
-                    encoder,
-                    &mut self.staging_belt,
-                    self.engine.format,
-                    viewport.physical_size().width,
-                    viewport.physical_size().height,
-                    index
-                );
+                self.offscreen_stage.set_layer_index(index);
             }
         }
 
-        if use_offscreen_texture {
-            self.offscreen_stage.ensure_frame(
-                &self.engine.device,
-                encoder,
-                &mut self.staging_belt,
-                self.engine.format,
-                viewport.physical_size().width,
-                viewport.physical_size().height,
-            );
-            self.use_offscreen_texture = true;
-        }
+        self.offscreen_stage.ensure(
+            &self.engine.device,
+            encoder,
+            &mut self.staging_belt,
+            self.engine.format,
+            viewport.physical_size().width,
+            viewport.physical_size().height,
+            use_offscreen_texture
+        );
 
-        let offscreen_bg = if self.use_offscreen_texture {
-            self.offscreen_stage.get_screen_target_bind_group()
-        } else { None };
-        let screen_buffer_size = self.offscreen_stage.get_buffer_size().unwrap_or(viewport.physical_size());
+        let frame_bg =  self.offscreen_stage.get_frame_bind_group();
+        let screen_buffer_size = self.offscreen_stage.get_buffer_size();
 
         for (index,layer) in self.layers.iter().enumerate() {
             let clip_bounds = layer.bounds * scale_factor;
@@ -434,9 +419,9 @@ impl Renderer {
                         // 检查是否是 image primitive
                         if instance.primitive.is_custom_primitive() {
                             let screen_bg = if instance.primitive.should_use_offscreen_layer() {
-                                self.offscreen_stage.get_layer_target_bind_group()
+                                self.offscreen_stage.get_layer_bind_group()
                             } else {
-                                offscreen_bg.clone()
+                                frame_bg.clone()
                             };
                             instance.primitive.prepare_custom_primitive(
                                 &mut primitive_storage,
@@ -529,23 +514,19 @@ impl Renderer {
             }),
             None => wgpu::LoadOp::Load,
         };
-        let (frame,wgpu_clear_color)= if self.use_offscreen_texture {
-            match self.offscreen_stage.get_screen_texture_view_bind_group() {
-                None => {
-                    (main_frame,clear_color)
-                }
-                Some((screen_texture,screen_bg)) => {
-                    (screen_texture,wgpu::LoadOp::Clear(wgpu::Color::TRANSPARENT))
-                }
+        let (frame_texture_view,frame_clear_color) = match self.offscreen_stage.get_frame_texture_view() {
+            None => {
+                (main_frame,clear_color)
             }
-        } else {
-            (main_frame,clear_color)
+            Some(screen_texture) => {
+                (screen_texture,wgpu::LoadOp::Clear(wgpu::Color::TRANSPARENT))
+            }
         };
-        let mut render_pass = new_render_pass(
+        let mut frame_render_pass = new_render_pass(
             encoder,
             viewport.physical_size(),
-            frame,
-            wgpu_clear_color,
+            frame_texture_view,
+            frame_clear_color,
         );
 
         let mut quad_layer = 0;
@@ -561,7 +542,6 @@ impl Renderer {
         ));
 
         let scale = Transformation::scale(scale_factor);
-
         for (index,layer) in self.layers.iter().enumerate() {
             // Check if should render to offscreen layer
             let layer_view_bg = self.offscreen_stage.is_layer_use_offscreen(index);
@@ -572,12 +552,12 @@ impl Renderer {
                         None => { None }
                         Some((v,bg)) => {Some(bg)}
                     };
-                    (frame,bg)
+                    (frame_texture_view,bg)
                 }
                 Some((layer_view,layer_bg)) => {
                     //Drop Main render pass, Begin layer render pass
-                    let _ = ManuallyDrop::into_inner(render_pass);
-                    render_pass = new_render_pass(
+                    let _ = ManuallyDrop::into_inner(frame_render_pass);
+                    frame_render_pass = new_render_pass(
                         encoder,
                         viewport.physical_size(),
                         layer_view,
@@ -603,21 +583,21 @@ impl Renderer {
                     quad_layer,
                     scissor_rect,
                     &layer.quads,
-                    &mut render_pass,
+                    &mut frame_render_pass,
                 );
                 render_span.finish();
-
+                println!("render quad");
                 quad_layer += 1;
             }
 
             if !layer.triangles.is_empty() {
-                let _ = ManuallyDrop::into_inner(render_pass);
+                let _ = ManuallyDrop::into_inner(frame_render_pass);
 
                 let render_span = debug::render(debug::Primitive::Triangle);
                 mesh_layer += self.triangle.render(
                     &self.engine.triangle_pipeline,
                     encoder,
-                    frame,
+                    layer_frame,
                     mesh_layer,
                     &layer.triangles,
                     physical_bounds,
@@ -626,7 +606,7 @@ impl Renderer {
                 );
                 render_span.finish();
 
-                render_pass = new_render_pass(
+                frame_render_pass = new_render_pass(
                     encoder,
                     viewport.physical_size(),
                     layer_frame,
@@ -655,7 +635,7 @@ impl Renderer {
                         .intersection(&physical_bounds)
                         .and_then(Rectangle::snap)
                     {
-                        render_pass.set_viewport(
+                        frame_render_pass.set_viewport(
                             bounds.x,
                             bounds.y,
                             bounds.width,
@@ -664,7 +644,7 @@ impl Renderer {
                             1.0,
                         );
 
-                        render_pass.set_scissor_rect(
+                        frame_render_pass.set_scissor_rect(
                             clip_bounds.x,
                             clip_bounds.y,
                             clip_bounds.width,
@@ -673,7 +653,7 @@ impl Renderer {
 
                         let drawn = instance
                             .primitive
-                            .draw(&primitive_storage, &mut render_pass);
+                            .draw(&primitive_storage, &mut frame_render_pass);
 
                         if !drawn {
                             need_render.push((instance, clip_bounds));
@@ -681,7 +661,7 @@ impl Renderer {
                     }
                 }
 
-                render_pass.set_viewport(
+                frame_render_pass.set_viewport(
                     0.0,
                     0.0,
                     viewport.physical_width() as f32,
@@ -690,7 +670,7 @@ impl Renderer {
                     1.0,
                 );
 
-                render_pass.set_scissor_rect(
+                frame_render_pass.set_scissor_rect(
                     0,
                     0,
                     viewport.physical_width(),
@@ -698,7 +678,7 @@ impl Renderer {
                 );
 
                 if !need_render.is_empty() {
-                    let _ = ManuallyDrop::into_inner(render_pass);
+                    let _ = ManuallyDrop::into_inner(frame_render_pass);
 
                     for (instance, clip_bounds) in need_render {
                         #[cfg(any(feature = "image", feature = "svg"))]
@@ -708,7 +688,7 @@ impl Renderer {
                                 instance.primitive.render_custom_primitive_background(
                                     &primitive_storage,
                                     encoder,
-                                    frame,
+                                    layer_frame,
                                     offscreen_bind_group,
                                     &clip_bounds,
                                     &image_cache,
@@ -720,12 +700,12 @@ impl Renderer {
                         instance.primitive.render(
                             &primitive_storage,
                             encoder,
-                            frame,
+                            layer_frame,
                             &clip_bounds,
                         );
                     }
 
-                    render_pass = new_render_pass(
+                    frame_render_pass = new_render_pass(
                         encoder,
                         viewport.physical_size(),
                         layer_frame,
@@ -743,7 +723,7 @@ impl Renderer {
                     &self.engine.image_pipeline,
                     image_layer,
                     scissor_rect,
-                    &mut render_pass,
+                    &mut frame_render_pass,
                 );
                 render_span.finish();
 
@@ -758,7 +738,7 @@ impl Renderer {
                     text_layer,
                     &layer.text,
                     scissor_rect,
-                    &mut render_pass,
+                    &mut frame_render_pass,
                 );
                 render_span.finish();
             }
@@ -784,7 +764,7 @@ impl Renderer {
                         .intersection(&physical_bounds)
                         .and_then(Rectangle::snap)
                     {
-                        render_pass.set_viewport(
+                        frame_render_pass.set_viewport(
                             bounds.x,
                             bounds.y,
                             bounds.width,
@@ -793,7 +773,7 @@ impl Renderer {
                             1.0,
                         );
 
-                        render_pass.set_scissor_rect(
+                        frame_render_pass.set_scissor_rect(
                             clip_bounds.x,
                             clip_bounds.y,
                             clip_bounds.width,
@@ -802,7 +782,7 @@ impl Renderer {
 
                         let drawn = instance
                             .primitive
-                            .draw(&primitive_storage, &mut render_pass);
+                            .draw(&primitive_storage, &mut frame_render_pass);
 
                         if !drawn {
                             need_render.push((instance, clip_bounds));
@@ -810,7 +790,7 @@ impl Renderer {
                     }
                 }
 
-                render_pass.set_viewport(
+                frame_render_pass.set_viewport(
                     0.0,
                     0.0,
                     viewport.physical_width() as f32,
@@ -819,7 +799,7 @@ impl Renderer {
                     1.0,
                 );
 
-                render_pass.set_scissor_rect(
+                frame_render_pass.set_scissor_rect(
                     0,
                     0,
                     viewport.physical_width(),
@@ -827,7 +807,7 @@ impl Renderer {
                 );
 
                 if !need_render.is_empty() {
-                    let _ = ManuallyDrop::into_inner(render_pass);
+                    let _ = ManuallyDrop::into_inner(frame_render_pass);
 
                     for (instance, clip_bounds) in need_render {
                         #[cfg(any(feature = "image", feature = "svg"))]
@@ -837,7 +817,7 @@ impl Renderer {
                                 instance.primitive.render_custom_primitive_foreground(
                                     &primitive_storage,
                                     encoder,
-                                    frame,
+                                    layer_frame,
                                     offscreen_bind_group,
                                     &clip_bounds,
                                     &image_cache,
@@ -846,7 +826,7 @@ impl Renderer {
                             }
                         }
                     }
-                    render_pass = new_render_pass(
+                    frame_render_pass = new_render_pass(
                         encoder,
                         viewport.physical_size(),
                         layer_frame,
@@ -859,21 +839,21 @@ impl Renderer {
             // Check if use layer offscreen, should blit to main frame
             if layer_use_offscreen_texture {
                 //Begin main render pass
-                let _ = ManuallyDrop::into_inner(render_pass);
-                render_pass = new_render_pass(
+                let _ = ManuallyDrop::into_inner(frame_render_pass);
+                frame_render_pass = new_render_pass(
                     encoder,
                     viewport.physical_size(),
-                    frame,
+                    frame_texture_view,
                     wgpu::LoadOp::Load
                 );
-                self.offscreen_stage.render_to_layer(&mut render_pass);
+                self.offscreen_stage.render_to_layer(&mut frame_render_pass);
             }
         }
 
-        let _ = ManuallyDrop::into_inner(render_pass);
+        let _ = ManuallyDrop::into_inner(frame_render_pass);
 
         // If use offscreen texture. Should blit to main buffer
-        if self.use_offscreen_texture {
+        if self.offscreen_stage.use_frame_offscreen() {
             //Create Render Pass
             let mut render_pass = ManuallyDrop::new(encoder.begin_render_pass(
                 &wgpu::RenderPassDescriptor {
@@ -895,6 +875,7 @@ impl Renderer {
             //Blit
             self.offscreen_stage.render_to_screen(&mut render_pass);
             let _ = ManuallyDrop::into_inner(render_pass);
+            println!("blit to screen");
         }
 
         debug::layers_rendered(|| {
@@ -1229,6 +1210,9 @@ fn new_render_pass<'a>(
     targets: &'a wgpu::TextureView,
     load: wgpu::LoadOp<wgpu::Color>
 ) -> ManuallyDrop<wgpu::RenderPass<'a>> {
+    if load == wgpu::LoadOp::Clear(wgpu::Color::TRANSPARENT) {
+        println!("*************clear")
+    }
     let mut pass = ManuallyDrop::new(encoder.begin_render_pass(
         &wgpu::RenderPassDescriptor {
             label: Some("iced_wgpu render pass"),

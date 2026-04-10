@@ -77,11 +77,11 @@ impl shader::Primitive for Primitive {
 
     /// Returns `true` if this [`iced::widget::shader::Primitive`] Sampler From Screen Texture.
     fn should_use_offscreen_texture(&self) -> bool {
-        true
+        false
     }
 
     fn should_use_offscreen_layer(&self) -> bool {
-        true
+        false
     }
 }
 

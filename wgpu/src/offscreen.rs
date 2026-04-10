@@ -1,7 +1,6 @@
-use std::collections::HashSet;
-use wgpu::{BindGroup, TextureView};
+use crate::Buffer;
 use crate::core::Size;
-use crate::{Buffer};
+use std::collections::HashSet;
 use wgpu::util::RenderEncoder;
 
 #[derive(Debug)]
@@ -19,8 +18,12 @@ pub struct OffscreenState {
     pub(crate) layer_target: OffscreenTexture,
     // Window Size
     pub(crate) window_size: Size<u32>,
+    // Buffer Size
+    pub(crate) buffer_size: Size<u32>,
     // Layer index map
     pub(crate) layer_index_map: HashSet<usize>,
+    // Use Frame Offscreen
+    pub(crate) use_frame_offscreen: bool,
 }
 
 #[derive(Debug)]
@@ -35,8 +38,8 @@ impl OffscreenTexture {
         device: &wgpu::Device,
         target_format: wgpu::TextureFormat,
         texture_bind_group_layout: &wgpu::BindGroupLayout,
-        width: u32,
-        height: u32,
+        buffer_width: u32,
+        buffer_height: u32,
     ) {
         match self {
             OffscreenTexture::Empty => {
@@ -44,50 +47,45 @@ impl OffscreenTexture {
                     device,
                     target_format,
                     texture_bind_group_layout,
-                    width,
-                    height,
+                    buffer_width,
+                    buffer_height,
                 );
                 target.prepare(
                     device,
                     target_format,
                     texture_bind_group_layout,
-                    width,
-                    height,
+                    buffer_width,
+                    buffer_height,
                 );
                 *self = Self::Ready(OffscreenTarget::new(
                     device,
                     target_format,
                     texture_bind_group_layout,
-                    width,
-                    height,
+                    buffer_width,
+                    buffer_height,
                 ));
             }
-            OffscreenTexture::Ready(r) => {
-                r.prepare(device, target_format, texture_bind_group_layout, width, height)
-            }
-        }
-    }
-
-    pub fn get_buffer_size(&self) -> Option<(Size<u32>)> {
-        match &self {
-            OffscreenTexture::Empty => {
-                None
-            }
-            OffscreenTexture::Ready(r) => {
-                Some(r.buffer_size)
-            }
+            OffscreenTexture::Ready(r) => r.prepare(
+                device,
+                target_format,
+                texture_bind_group_layout,
+                buffer_width,
+                buffer_height,
+            ),
         }
     }
 }
 
 impl OffscreenState {
-    pub(crate) fn clear(
-        &mut self,
-    ) {
+    pub(crate) fn clear(&mut self) {
         self.layer_index_map.clear();
+        self.use_frame_offscreen = false;
     }
 
-    pub(crate) fn is_layer_use_offscreen(&self, layer_index: usize) -> Option<(&wgpu::TextureView, &wgpu::BindGroup)> {
+    pub(crate) fn is_layer_use_offscreen(
+        &self,
+        layer_index: usize,
+    ) -> Option<(&wgpu::TextureView, &wgpu::BindGroup)> {
         let layer_use_offscreen = self.layer_index_map.contains(&layer_index);
         if layer_use_offscreen {
             self.get_layer_texture_view_bind_group()
@@ -95,7 +93,12 @@ impl OffscreenState {
             None
         }
     }
-    pub(crate) fn ensure_frame(
+
+    pub fn set_layer_index(&mut self, layer_index: usize) {
+        let _ = self.layer_index_map.insert(layer_index);
+    }
+
+    pub(crate) fn ensure(
         &mut self,
         device: &wgpu::Device,
         encoder: &mut wgpu::CommandEncoder,
@@ -103,106 +106,111 @@ impl OffscreenState {
         target_format: wgpu::TextureFormat,
         width: u32,
         height: u32,
+        use_screen: bool,
     ) {
-        self.screen_target.ensure(
-            device,
-            target_format,
-            &self.texture_layout,
-            width,
-            height,
+        let buffer_size = Size::new(
+            next_buffer_size(self.buffer_size.width, width),
+            next_buffer_size(self.buffer_size.height, height),
         );
-        let buffer_size = self.screen_target.get_buffer_size();
         let window_size = Size::new(width, height);
-        if let Some(size) = buffer_size {
-            if self.window_size.width != width || self.window_size.height != height {
-                self.prepare_uniform(
-                    device,
-                    encoder,
-                    belt,
-                    &window_size,
-                    &size
-                );
-                self.window_size = Size::new(width, height);
-            }
+        if use_screen {
+            self.screen_target.ensure(
+                device,
+                target_format,
+                &self.texture_layout,
+                buffer_size.width,
+                buffer_size.height,
+            );
         }
+        if !self.layer_index_map.is_empty() {
+            self.layer_target.ensure(
+                device,
+                target_format,
+                &self.texture_layout,
+                buffer_size.width,
+                buffer_size.height,
+            );
+        }
+        if self.window_size != window_size || self.buffer_size != buffer_size {
+            self.prepare_uniform(
+                device,
+                encoder,
+                belt,
+                &window_size,
+                &buffer_size,
+            )
+        }
+        self.window_size = window_size;
+        self.buffer_size = buffer_size;
+        self.use_frame_offscreen = use_screen;
     }
 
-    pub(crate) fn ensure_layer(
-        &mut self,
-        device: &wgpu::Device,
-        encoder: &mut wgpu::CommandEncoder,
-        belt: &mut wgpu::util::StagingBelt,
-        target_format: wgpu::TextureFormat,
-        width: u32,
-        height: u32,
-        index: usize,
-    ) {
-        self.layer_target.ensure(
-            device,
-            target_format,
-            &self.texture_layout,
-            width,
-            height,
-        );
-        let buffer_size = self.layer_target.get_buffer_size();
-        let window_size = self.window_size;
-        if let Some(size) = buffer_size {
-            if self.window_size.width != width || self.window_size.height != height {
-                self.prepare_uniform(
-                    device,
-                    encoder,
-                    belt,
-                    &window_size,
-                    &size
-                )
-            }
-        }
-        let _ = self.layer_index_map.insert(index);
-    }
-
-    pub(crate) fn get_screen_texture_view_bind_group(&self) -> Option<(&wgpu::TextureView, &wgpu::BindGroup)> {
+    pub(crate) fn get_screen_texture_view_bind_group(
+        &self,
+    ) -> Option<(&wgpu::TextureView, &wgpu::BindGroup)> {
         match &self.screen_target {
             OffscreenTexture::Empty => None,
-            OffscreenTexture::Ready(r) => Some((&r.texture_view,&r.texture_bind_group)),
+            OffscreenTexture::Ready(r) => {
+                Some((&r.texture_view, &r.texture_bind_group))
+            }
         }
     }
 
-    pub(crate) fn get_layer_texture_view_bind_group(&self) -> Option<(&wgpu::TextureView, &wgpu::BindGroup)> {
+    pub(crate) fn get_layer_texture_view_bind_group(
+        &self,
+    ) -> Option<(&wgpu::TextureView, &wgpu::BindGroup)> {
         match &self.layer_target {
             OffscreenTexture::Empty => None,
-            OffscreenTexture::Ready(r) => Some((&r.texture_view,&r.texture_bind_group)),
+            OffscreenTexture::Ready(r) => {
+                Some((&r.texture_view, &r.texture_bind_group))
+            }
         }
     }
 
-    pub(crate) fn get_screen_target_bind_group(
-        &self,
-    ) -> Option<wgpu::BindGroup> {
-        match &self.screen_target {
+    pub fn use_frame_offscreen(&self) -> bool {
+        self.use_frame_offscreen
+    }
+
+    pub(crate) fn get_frame_bind_group(&self) -> Option<wgpu::BindGroup> {
+        if self.use_frame_offscreen {
+            match &self.screen_target {
+                OffscreenTexture::Empty => None,
+                OffscreenTexture::Ready(r) => {
+                    Some(r.texture_bind_group.clone())
+                }
+            }
+        } else {
+            None
+        }
+    }
+
+    pub(crate) fn get_frame_texture_view(&self) -> Option<&wgpu::TextureView> {
+        if self.use_frame_offscreen {
+            match &self.screen_target {
+                OffscreenTexture::Empty => None,
+                OffscreenTexture::Ready(r) => Some(&r.texture_view),
+            }
+        } else {
+            None
+        }
+    }
+
+    pub(crate) fn get_layer_bind_group(&self) -> Option<wgpu::BindGroup> {
+        match &self.layer_target {
             OffscreenTexture::Empty => None,
             OffscreenTexture::Ready(r) => Some(r.texture_bind_group.clone()),
         }
     }
 
-    pub(crate) fn get_layer_target_bind_group(
-        &self,
-    ) -> Option<wgpu::BindGroup> {
-        match &self.layer_target {
-            OffscreenTexture::Empty => None,
-            OffscreenTexture::Ready(r) => Some(r.texture_bind_group.clone()),
-        }
-    }
-
-    pub(crate) fn get_buffer_size(
-        &self,
-    ) -> Option<Size<u32>> {
-        self.screen_target.get_buffer_size()
+    pub(crate) fn get_buffer_size(&self) -> Size<u32> {
+        self.buffer_size
     }
 
     pub(crate) fn render_to_screen<'a>(
         &self,
         render_pass: &mut wgpu::RenderPass<'a>,
     ) {
-        if let Some(bd) = self.get_screen_target_bind_group() {
+        if let Some(bd) = self.get_frame_bind_group() {
             render_pass.set_pipeline(&self.blit_pipeline);
             render_pass.set_bind_group(0, &self.constant_bind_group, &[]);
             render_pass.set_bind_group(1, &bd, &[]);
@@ -214,7 +222,7 @@ impl OffscreenState {
         &self,
         render_pass: &mut wgpu::RenderPass<'a>,
     ) {
-        if let Some(bd) = self.get_layer_target_bind_group() {
+        if let Some(bd) = self.get_layer_bind_group() {
             render_pass.set_pipeline(&self.blit_pipeline);
             render_pass.set_bind_group(0, &self.constant_bind_group, &[]);
             render_pass.set_bind_group(1, &bd, &[]);
@@ -265,7 +273,9 @@ impl OffscreenState {
             screen_target: OffscreenTexture::Empty,
             layer_target: OffscreenTexture::Empty,
             window_size: Default::default(),
+            buffer_size: Default::default(),
             layer_index_map: Default::default(),
+            use_frame_offscreen: false,
         }
     }
 
@@ -281,13 +291,9 @@ impl OffscreenState {
             window_size.width as f32 / buffer_size.width as f32,
             window_size.height as f32 / buffer_size.height as f32,
         );
-        let _ = self.uniform_buffer.write(
-            device,
-            encoder,
-            belt,
-            0,
-            &[ratio],
-        );
+        let _ = self
+            .uniform_buffer
+            .write(device, encoder, belt, 0, &[ratio]);
     }
 
     /// Pipeline
@@ -412,9 +418,11 @@ impl OffscreenState {
                             wgpu::BufferBinding {
                                 buffer: &ratio.raw,
                                 offset: 0,
-                                size: wgpu::BufferSize::new(std::mem::size_of::<UVRatio>() as u64),
+                                size: wgpu::BufferSize::new(
+                                    std::mem::size_of::<UVRatio>() as u64,
+                                ),
                             },
-                        )
+                        ),
                     },
                 ],
             });
@@ -423,10 +431,10 @@ impl OffscreenState {
 }
 #[derive(Debug)]
 pub struct OffscreenTarget {
-    pub(crate) buffer_size: Size<u32>,
     pub(crate) texture: wgpu::Texture,
     pub(crate) texture_view: wgpu::TextureView,
     pub(crate) texture_bind_group: wgpu::BindGroup,
+    pub(crate) buffer_size: Size<u32>,
 }
 
 impl OffscreenTarget {
@@ -434,18 +442,16 @@ impl OffscreenTarget {
         device: &wgpu::Device,
         target_format: wgpu::TextureFormat,
         texture_bind_group_layout: &wgpu::BindGroupLayout,
-        width: u32,
-        height: u32,
+        buffer_width: u32,
+        buffer_height: u32,
     ) -> Self {
-        let window_size = Size::new(width, height);
-        let (texture, texture_view, texture_bind_group, buffer_size) =
-            Self::alloc_texture(
-                device,
-                target_format,
-                Size::new(0, 0),
-                window_size,
-                texture_bind_group_layout,
-            );
+        let buffer_size = Size::new(buffer_width, buffer_height);
+        let (texture, texture_view, texture_bind_group) = Self::alloc_texture(
+            device,
+            target_format,
+            buffer_size,
+            texture_bind_group_layout,
+        );
 
         Self {
             buffer_size,
@@ -460,25 +466,24 @@ impl OffscreenTarget {
         device: &wgpu::Device,
         target_format: wgpu::TextureFormat,
         texture_bind_group_layout: &wgpu::BindGroupLayout,
-        width: u32,
-        height: u32,
+        buffer_width: u32,
+        buffer_height: u32,
     ) {
-        let new_size = Size::new(width, height);
-        if width > self.buffer_size.width
-            || height > self.buffer_size.height
+        let new_size = Size::new(buffer_width, buffer_height);
+        if buffer_width > self.buffer_size.width
+            || buffer_height > self.buffer_size.height
         {
-            let (texture, texture_view, texture_bind_group, buffer_size) =
+            let (texture, texture_view, texture_bind_group) =
                 Self::alloc_texture(
                     device,
                     target_format,
-                    Size::new(0, 0),
                     new_size,
                     texture_bind_group_layout,
                 );
             self.texture = texture;
             self.texture_view = texture_view;
             self.texture_bind_group = texture_bind_group;
-            self.buffer_size = buffer_size;
+            self.buffer_size = new_size;
         }
     }
 
@@ -490,18 +495,14 @@ impl OffscreenTarget {
     pub fn alloc_texture(
         device: &wgpu::Device,
         target_format: wgpu::TextureFormat,
-        current_size: Size<u32>,
         new_size: Size<u32>,
         texture_bind_group_layout: &wgpu::BindGroupLayout,
-    ) -> (wgpu::Texture, wgpu::TextureView, wgpu::BindGroup, Size<u32>) {
-        let bw = next_buffer_size(current_size.width, new_size.width);
-        let bh = next_buffer_size(current_size.height, new_size.height);
-
+    ) -> (wgpu::Texture, wgpu::TextureView, wgpu::BindGroup) {
         let texture = device.create_texture(&wgpu::TextureDescriptor {
             label: Some("offscreen_texture"),
             size: wgpu::Extent3d {
-                width: bw,
-                height: bh,
+                width: new_size.width,
+                height: new_size.height,
                 depth_or_array_layers: 1,
             },
             mip_level_count: 1,
@@ -524,7 +525,7 @@ impl OffscreenTarget {
                     resource: wgpu::BindingResource::TextureView(&texture_view),
                 }],
             });
-        (texture, texture_view, texture_bind_group, Size::new(bw, bh))
+        (texture, texture_view, texture_bind_group)
     }
 }
 
@@ -555,7 +556,7 @@ impl UVRatio {
         Self {
             u,
             v,
-            _padding: [0.;62],
+            _padding: [0.; 62],
         }
     }
 }

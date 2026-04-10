@@ -78,7 +78,7 @@ impl IcedCubes {
         let canvas = canvas::Canvas::new(rect_canvas)
             .width(300)
             .height(300);
-        center(column![shader, container, canvas].align_x(Center)).into()
+        center(column![canvas,shader, container].align_x(Center)).into()
     }
 
     fn subscription(&self) -> Subscription<Message> {
