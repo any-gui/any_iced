@@ -4,7 +4,7 @@ mod solid;
 use gradient::Gradient;
 use solid::Solid;
 
-use crate::core::{Background, Rectangle, Transformation};
+use crate::core::{Background, Point, Rectangle, Size, Transformation};
 use crate::graphics;
 use crate::graphics::color;
 
@@ -280,7 +280,10 @@ impl Batch {
                 self.gradients.push(Gradient {
                     gradient: graphics::gradient::pack(
                         gradient,
-                        Rectangle::new(quad.position.into(), quad.size.into()),
+                        Rectangle::new(
+                            Point::new(quad.position[0], quad.position[1]),
+                            Size::new(quad.size[0], quad.size[1]),
+                        )
                     ),
                     quad,
                 });

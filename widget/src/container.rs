@@ -532,12 +532,6 @@ impl From<Gradient> for Style {
     }
 }
 
-impl From<gradient::Linear> for Style {
-    fn from(gradient: gradient::Linear) -> Self {
-        Self::default().background(gradient)
-    }
-}
-
 /// The theme catalog of a [`Container`].
 pub trait Catalog {
     /// The item class of the [`Catalog`].

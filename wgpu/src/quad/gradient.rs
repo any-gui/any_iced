@@ -85,11 +85,13 @@ impl Pipeline {
                     label: Some("iced_wgpu.quad.gradient.shader"),
                     source: wgpu::ShaderSource::Wgsl(
                         std::borrow::Cow::Borrowed(concat!(
+                            include_str!("../shader/gradient.wgsl"),
+                            "\n",
                             include_str!("../shader/quad.wgsl"),
                             "\n",
                             include_str!("../shader/vertex.wgsl"),
                             "\n",
-                            include_str!("../shader/quad/gradient.wgsl"),
+                            include_str!("../shader/quad/quad_gradient_v2.wgsl"),
                             "\n",
                             include_str!("../shader/color.wgsl"),
                             "\n",
@@ -120,18 +122,24 @@ impl Pipeline {
                                 3 => Uint32x4,
                                 // Offsets 1-8
                                 4 => Uint32x4,
-                                // Direction
-                                5 => Float32x4,
+                                // Origin
+                                5 => Float32x2,
+                                // Axis_x
+                                6 => Float32x2,
+                                // Axis_y
+                                7 => Float32x2,
+                                // Gradient Type
+                                8 => Uint32,
                                 // Position & Scale
-                                6 => Float32x4,
+                                9 => Float32x4,
                                 // Border color
-                                7 => Float32x4,
+                                10 => Float32x4,
                                 // Border radius
-                                8 => Float32x4,
+                                11 => Float32x4,
                                 // Border width
-                                9 => Float32,
+                                12 => Float32,
                                 // Snap
-                                10 => Uint32,
+                                13 => Uint32,
                             ),
                         }],
                         compilation_options:

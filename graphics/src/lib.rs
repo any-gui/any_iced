@@ -31,7 +31,6 @@ pub use antialiasing::Antialiasing;
 pub use cache::Cache;
 pub use compositor::Compositor;
 pub use error::Error;
-pub use gradient::Gradient;
 pub use image::Image;
 pub use layer::Layer;
 pub use mesh::Mesh;

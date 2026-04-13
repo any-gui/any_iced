@@ -941,9 +941,11 @@ mod gradient {
                     label: Some("iced_wgpu.triangle.gradient.shader"),
                     source: wgpu::ShaderSource::Wgsl(
                         std::borrow::Cow::Borrowed(concat!(
+                            include_str!("shader/gradient.wgsl"),
+                            "\n",
                             include_str!("shader/triangle.wgsl"),
                             "\n",
-                            include_str!("shader/triangle/gradient.wgsl"),
+                            include_str!("shader/triangle/gradient_v2.wgsl"),
                             "\n",
                             include_str!("shader/color.wgsl"),
                             "\n",
@@ -978,10 +980,16 @@ mod gradient {
                                 4 => Uint32x4,
                                 // Offsets
                                 5 => Uint32x4,
-                                // Direction
-                                6 => Float32x4,
+                                // Origin
+                                6 => Float32x2,
+                                // Axis_x
+                                7 => Float32x2,
+                                // Axis_y
+                                8 => Float32x2,
+                                // Gradient Type
+                                9 => Uint32,
                                 // Coverage
-                                7 => Float32,
+                                10 => Float32,
                             ),
                         }],
                         compilation_options:

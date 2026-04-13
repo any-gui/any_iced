@@ -586,7 +586,6 @@ impl Renderer {
                     &mut frame_render_pass,
                 );
                 render_span.finish();
-                println!("render quad");
                 quad_layer += 1;
             }
 

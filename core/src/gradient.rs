@@ -1,109 +1,205 @@
 //! Colors that transition progressively.
-use crate::{Color, Radians};
+//!
+//! This module defines a high-level, CPU-side representation of gradients.
+//!
+//! A [`Gradient`] describes a color field over a normalized coordinate space
+//! (`0.0..=1.0`). It is independent of any specific geometry or transform.
+//!
+//! The gradient can later be converted into a GPU-friendly [`Packed`] form
+//! (see `pack.rs`), where it becomes an affine coordinate system.
+//!
+//! ## Design Philosophy
+//!
+//! This abstraction separates:
+//!
+//! - **What** the gradient is (semantic)
+//! - **How** it is evaluated (shader / affine transform)
+//!
+//! ## Coordinate Space
+//!
+//! `start_point` and `end_point` are defined in normalized space:
+//!
+//! ```text
+//! (0,0) -------- (1,0)
+//!   |              |
+//!   |              |
+//! (0,1) -------- (1,1)
+//! ```
+//!
+//! This allows the same gradient to be reused across different geometries.
+//!
+//! ## Guarantees After `normalize()`
+//!
+//! - Offsets are clamped to `[0.0, 1.0]`
+//! - Stops are sorted
+//! - At most 8 stops
+//! - At least 2 stops (duplicated if needed)
+//!
+//! These guarantees simplify GPU logic.
 
+use crate::{Color, Point};
 use std::cmp::Ordering;
 
-#[derive(Debug, Clone, Copy, PartialEq)]
-/// A fill which transitions colors progressively along a direction, either linearly, radially (TBD),
-/// or conically (TBD).
-pub enum Gradient {
-    /// A linear gradient interpolates colors along a direction at a specific angle.
-    Linear(Linear),
-}
-
-impl Gradient {
-    /// Scales the alpha channel of the [`Gradient`] by the given factor.
-    pub fn scale_alpha(self, factor: f32) -> Self {
-        match self {
-            Gradient::Linear(linear) => {
-                Gradient::Linear(linear.scale_alpha(factor))
-            }
-        }
-    }
-}
-
-impl From<Linear> for Gradient {
-    fn from(gradient: Linear) -> Self {
-        Self::Linear(gradient)
-    }
-}
-
-#[derive(Debug, Default, Clone, Copy, PartialEq)]
-/// A point along the gradient vector where the specified [`color`] is unmixed.
+/// The type of gradient.
 ///
-/// [`color`]: Self::color
+/// This determines how the interpolation parameter `t`
+/// is computed in shader code.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum GradientType {
+    /// Linear interpolation along a direction.
+    Linear,
+
+    /// Radial interpolation from a center.
+    Radial,
+
+    /// Angular interpolation (circular gradient).
+    Angular,
+
+    /// Diamond-shaped interpolation (Manhattan distance).
+    Diamond,
+}
+
+/// A single color stop in a gradient.
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub struct ColorStop {
-    /// Offset along the gradient vector.
+    /// Position along gradient `[0.0, 1.0]`
     pub offset: f32,
 
-    /// The color of the gradient at the specified [`offset`].
-    ///
-    /// [`offset`]: Self::offset
+    /// Color at this position
     pub color: Color,
 }
 
-/// A linear gradient.
+/// High-level gradient definition.
+///
+/// This struct is CPU-friendly and flexible.
+/// It should be normalized before packing.
 #[derive(Debug, Clone, Copy, PartialEq)]
-pub struct Linear {
-    /// How the [`Gradient`] is angled within its bounds.
-    pub angle: Radians,
-    /// [`ColorStop`]s along the linear gradient path.
+pub struct Gradient {
+    /// Gradient evaluation type
+    pub gradient_type: GradientType,
+
+    /// Start point (normalized space)
+    pub start_point: Point,
+
+    /// End point (normalized space)
+    pub end_point: Point,
+
+    /// Ellipse ratio (for radial / angular / diamond)
+    ///
+    /// - `1.0` = circle
+    /// - `< 1.0` = squashed
+    /// - `> 1.0` = stretched
+    pub aspect_ratio: f32,
+
+    /// Up to 8 color stops
     pub stops: [Option<ColorStop>; 8],
 }
 
-impl Linear {
-    /// Creates a new [`Linear`] gradient with the given angle in [`Radians`].
-    pub fn new(angle: impl Into<Radians>) -> Self {
+impl Gradient {
+    /// Create an empty gradient
+    pub fn new(
+        gradient_type: GradientType,
+        start_point: Point,
+        end_point: Point,
+    ) -> Self {
         Self {
-            angle: angle.into(),
+            gradient_type,
+            start_point,
+            end_point,
+            aspect_ratio: 1.0,
             stops: [None; 8],
         }
     }
 
-    /// Adds a new [`ColorStop`], defined by an offset and a color, to the gradient.
-    ///
-    /// Any `offset` that is not within `0.0..=1.0` will be silently ignored.
-    ///
-    /// Any stop added after the 8th will be silently ignored.
-    pub fn add_stop(mut self, offset: f32, color: Color) -> Self {
-        if offset.is_finite() && (0.0..=1.0).contains(&offset) {
-            let (Ok(index) | Err(index)) =
-                self.stops.binary_search_by(|stop| match stop {
-                    None => Ordering::Greater,
-                    Some(stop) => stop.offset.partial_cmp(&offset).unwrap(),
-                });
-
-            if index < 8 {
-                self.stops[index] = Some(ColorStop { offset, color });
-            }
-        } else {
-            log::warn!("Gradient color stop must be within 0.0..=1.0 range.");
-        };
-
+    /// Set ellipse aspect ratio
+    pub fn with_aspect_ratio(mut self, ratio: f32) -> Self {
+        self.aspect_ratio = ratio.max(0.0001);
         self
     }
 
-    /// Adds multiple [`ColorStop`]s to the gradient.
-    ///
-    /// Any stop added after the 8th will be silently ignored.
-    pub fn add_stops(
-        mut self,
+    /// Add a stop
+    pub fn add_stop(&mut self, stop: ColorStop) {
+        if !stop.offset.is_finite() {
+            return;
+        }
+
+        let mut stops: Vec<_> = self.stops.iter().flatten().copied().collect();
+
+        stops.push(ColorStop {
+            offset: stop.offset.clamp(0.0, 1.0),
+            color: stop.color,
+        });
+
+        stops.sort_by(|a, b| {
+            a.offset.partial_cmp(&b.offset).unwrap_or(Ordering::Equal)
+        });
+
+        stops.truncate(8);
+
+        self.stops = [None; 8];
+        for (i, s) in stops.into_iter().enumerate() {
+            self.stops[i] = Some(s);
+        }
+    }
+
+    /// Add stop by offset and color
+    pub fn with_stop(mut self, offset: f32, color: Color) -> Self {
+        self.add_stop(ColorStop { offset, color });
+        self
+    }
+
+    /// Build Gradient With Stops
+    pub fn with_stops(
+        gradient_type: GradientType,
+        start_point: Point,
+        end_point: Point,
         stops: impl IntoIterator<Item = ColorStop>,
     ) -> Self {
-        for stop in stops {
-            self = self.add_stop(stop.offset, stop.color);
+        let mut g = Self::new(gradient_type, start_point, end_point);
+        for s in stops {
+            g.add_stop(s);
         }
-
-        self
+        g.normalize();
+        g
     }
 
-    /// Scales the alpha channel of the [`Linear`] gradient by the given
-    /// factor.
-    pub fn scale_alpha(mut self, factor: f32) -> Self {
-        for stop in self.stops.iter_mut().flatten() {
-            stop.color.a *= factor;
+    /// Normalize stops
+    pub fn normalize(&mut self) {
+        let mut stops: Vec<_> = self.stops.iter().flatten().copied().collect();
+
+        if stops.is_empty() {
+            return;
         }
 
+        for s in &mut stops {
+            s.offset = s.offset.clamp(0.0, 1.0);
+        }
+
+        stops.sort_by(|a, b| {
+            a.offset.partial_cmp(&b.offset).unwrap_or(Ordering::Equal)
+        });
+
+        if stops.len() == 1 {
+            let s = stops[0];
+            stops.push(ColorStop {
+                offset: 1.0,
+                color: s.color,
+            });
+        }
+
+        stops.truncate(8);
+
+        self.stops = [None; 8];
+        for (i, s) in stops.into_iter().enumerate() {
+            self.stops[i] = Some(s);
+        }
+    }
+
+    /// Scale alpha of all stops
+    pub fn scale_alpha(mut self, factor: f32) -> Self {
+        for s in self.stops.iter_mut().flatten() {
+            s.color.a *= factor;
+        }
         self
     }
 }

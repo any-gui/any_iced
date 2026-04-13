@@ -3,7 +3,9 @@ use iced_graphics::{color};
 use iced_graphics::geometry::{Style};
 use crate::geometry::clip::{signed_area, ClipContourPoint};
 use clipper2::{Point as ClipPoint};
+use iced_graphics::gradient::pack;
 use iced_graphics::mesh::{GradientVertex2D, Indexed, SolidVertex2D};
+use crate::core::Rectangle;
 
 pub const AA_FEATHER_ONE_SIDE: f32 = 0.5;
 
@@ -47,6 +49,7 @@ pub fn build_aa_mesh(
     paths: Paths,
     style: Style,
     scale_factor: f32,
+    bound_rect: Rectangle
 ) -> CoverageMesh {
     let mut vertices: Vec<CoverageVertex> = vec![];
     let mut indices: Vec<u32> = vec![];
@@ -134,7 +137,7 @@ pub fn build_aa_mesh(
         }
     }
 
-    build_mesh_from_coverage_vertices(vertices, indices, style)
+    build_mesh_from_coverage_vertices(vertices, indices, style, bound_rect)
 }
 
 fn outward_normal(edge: ClipContourPoint, is_outer: bool) -> ClipContourPoint {
@@ -177,6 +180,7 @@ fn build_mesh_from_coverage_vertices(
     vertices: Vec<CoverageVertex>,
     indices: Vec<u32>,
     style: Style,
+    bound_rect: Rectangle,
 ) -> CoverageMesh {
     match style {
         Style::Solid(color) => {
@@ -202,7 +206,7 @@ fn build_mesh_from_coverage_vertices(
                         .into_iter()
                         .map(|v| GradientVertex2D {
                             position: v.position,
-                            gradient: gradient.pack(),
+                            gradient: pack(&gradient,bound_rect),
                             coverage: v.coverage,
                         })
                         .collect(),

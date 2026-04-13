@@ -151,11 +151,11 @@ impl Engine {
                     Background::Color(color) => {
                         tiny_skia::Shader::SolidColor(into_color(*color))
                     }
-                    Background::Gradient(Gradient::Linear(linear)) => {
-                        let (start, end) =
-                            linear.angle.to_distance(&quad.bounds);
+                    Background::Gradient(gradient) => {
+                        let start = gradient.start_point;
+                        let end = gradient.end_point;
 
-                        let stops: Vec<tiny_skia::GradientStop> = linear
+                        let stops: Vec<tiny_skia::GradientStop> = gradient
                             .stops
                             .into_iter()
                             .flatten()

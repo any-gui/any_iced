@@ -1,223 +1,274 @@
-//! A gradient that can be used as a fill for some geometry.
+//! GPU-friendly packed representation of gradients.
 //!
-//! For a gradient that you can use as a background variant for a widget, see [`Gradient`].
-use crate::color;
-use crate::core::gradient::ColorStop;
-use crate::core::{self, Color, Point, Rectangle};
+//! This module converts [`Gradient`](crate::gradient::Gradient)
+//! into a format directly consumable by WGSL shaders.
+//!
+//! ## Core Idea
+//!
+//! Instead of passing start/end points, we build a **2D affine coordinate system**:
+//!
+//! ```text
+//! origin + axis_x + axis_y
+//! ```
+//!
+//! This allows the shader to compute:
+//!
+//! ```text
+//! p_local = inverse([axis_x axis_y]) * (p - origin)
+//! ```
+//!
+//! Then gradient evaluation becomes trivial.
+//!
+//! ## Advantages
+//!
+//! - Supports all gradient types uniformly
+//! - Enables elliptical gradients
+//! - Works for both quad and mesh
+//! - Matches Figma / Skia / WebRender design
 
 use bytemuck::{Pod, Zeroable};
 use half::f16;
-use std::cmp::Ordering;
+use iced_core::{Color, Gradient, Point, Rectangle};
+use iced_core::gradient::ColorStop;
 
-#[derive(Debug, Clone, Copy, PartialEq)]
-/// A fill which linearly interpolates colors along a direction.
+/// Packed gradient for GPU
+/// Packed gradient for GPU consumption.
 ///
-/// For a gradient which can be used as a fill for a background of a widget, see [`crate::core::Gradient`].
-pub enum Gradient {
-    /// A linear gradient interpolates colors along a direction from its `start` to its `end`
-    /// point.
-    Linear(Linear),
-}
-
-impl From<Linear> for Gradient {
-    fn from(gradient: Linear) -> Self {
-        Self::Linear(gradient)
-    }
-}
-
-impl Gradient {
-    /// Packs the [`Gradient`] for use in shader code.
-    pub fn pack(&self) -> Packed {
-        match self {
-            Gradient::Linear(linear) => linear.pack(),
-        }
-    }
-
-    /// Scale Alpha
-    pub fn scale_alpha(self, factor: f32) -> Self {
-        match self {
-            Gradient::Linear(linear) => {
-                Gradient::Linear(linear.scale_alpha(factor))
-            }
-        }
-    }
-
-    /// From iced core gradient
-    pub fn from_gradient(gradient: &core::Gradient,bound: &Rectangle) -> Self {
-        match gradient {
-            core::Gradient::Linear(l) => {
-                let (start, end) = l.angle.to_distance(bound);
-                Gradient::Linear(Linear {
-                    start,
-                    end,
-                    stops: l.stops,
-                })
-            }
-        }
-    }
-}
-
-/// A linear gradient.
-#[derive(Debug, Clone, Copy, PartialEq)]
-pub struct Linear {
-    /// The absolute starting position of the gradient.
-    pub start: Point,
-
-    /// The absolute ending position of the gradient.
-    pub end: Point,
-
-    /// [`ColorStop`]s along the linear gradient direction.
-    pub stops: [Option<ColorStop>; 8],
-}
-
-impl Linear {
-    /// Creates a new [`Linear`] builder.
-    pub fn new(start: Point, end: Point) -> Self {
-        Self {
-            start,
-            end,
-            stops: [None; 8],
-        }
-    }
-
-    /// Adds a new [`ColorStop`], defined by an offset and a color, to the gradient.
+/// This struct is a tightly packed, GPU-friendly representation of a [`Gradient`].
+/// It is designed to:
+///
+/// - Be safely cast to raw bytes (`Pod`)
+/// - Match WGSL memory layout exactly (`#[repr(C)]`)
+/// - Minimize bandwidth (f16 packing)
+/// - Encode a full 2D affine gradient space
+///
+/// ## Core Concept
+///
+/// Instead of storing `start/end` directly, we encode a **2D affine space**:
+///
+/// ```text
+/// p_local = inverse([axis_x axis_y]) * (p - origin)
+/// ```
+///
+/// Where:
+///
+/// - `origin` is the gradient origin (start point)
+/// - `axis_x` is the primary gradient direction
+/// - `axis_y` is the perpendicular axis (for ellipse support)
+///
+/// This allows all gradient types to share the same evaluation logic.
+///
+/// ## Memory Layout (C-compatible)
+///
+/// ```text
+/// colors        64B
+/// offsets       16B
+/// origin         8B
+/// axis_x         8B
+/// axis_y         8B
+/// gradient_type  4B
+/// padding        4B
+/// ----------------
+/// total         112B (16-byte aligned)
+/// ```
+///
+/// ## Shader Expectations
+///
+/// - Offsets are sorted ascending
+/// - Offsets in `[0.0, 1.0]`
+/// - Offsets > `1.0` are treated as invalid
+/// - Colors beyond last valid stop are ignored
+/// - `axis_x` and `axis_y` must not be degenerate
+#[repr(C)]
+#[derive(Debug, Copy, Clone, PartialEq, Zeroable, Pod)]
+pub struct Packed {
+    /// Gradient colors (max 8 stops).
     ///
-    /// Any `offset` that is not within `0.0..=1.0` will be silently ignored.
+    /// Each entry stores one RGBA color using two `u32` values:
     ///
-    /// Any stop added after the 8th will be silently ignored.
-    pub fn add_stop(mut self, offset: f32, color: Color) -> Self {
-        if offset.is_finite() && (0.0..=1.0).contains(&offset) {
-            let (Ok(index) | Err(index)) =
-                self.stops.binary_search_by(|stop| match stop {
-                    None => Ordering::Greater,
-                    Some(stop) => stop.offset.partial_cmp(&offset).unwrap(),
-                });
-
-            if index < 8 {
-                self.stops[index] = Some(ColorStop { offset, color });
-            }
-        } else {
-            log::warn!("Gradient: ColorStop must be within 0.0..=1.0 range.");
-        };
-
-        self
-    }
-
-    /// Adds multiple [`ColorStop`]s to the gradient.
+    /// ```text
+    /// colors[i][0] = pack_f16(r, g)
+    /// colors[i][1] = pack_f16(b, a)
+    /// ```
     ///
-    /// Any stop added after the 8th will be silently ignored.
-    pub fn add_stops(
-        mut self,
-        stops: impl IntoIterator<Item = ColorStop>,
-    ) -> Self {
-        for stop in stops {
-            self = self.add_stop(stop.offset, stop.color);
-        }
+    /// Each channel is stored as a 16-bit float (`f16`).
+    ///
+    /// Unused entries should contain transparent colors.
+    pub colors: [[u32; 2]; 8],
 
-        self
-    }
+    /// Gradient offsets (positions along the gradient).
+    ///
+    /// 8 offsets are packed into 4 `u32` values:
+    ///
+    /// ```text
+    /// offsets[i] = pack_f16s(offset[2*i], offset[2*i+1])
+    /// ```
+    ///
+    /// Shader-side expectations:
+    ///
+    /// - Must be sorted ascending
+    /// - Range: `[0.0, 1.0]`
+    /// - Values > `1.0` indicate unused stops
+    pub offsets: [u32; 4],
 
-    /// Packs the [`Gradient`] for use in shader code.
-    pub fn pack(&self) -> Packed {
-        let mut colors = [[0u32; 2]; 8];
-        let mut offsets = [f16::from(0u8); 8];
+    /// Gradient origin (start point).
+    ///
+    /// This is the reference point of the gradient in the same coordinate
+    /// space as the rendered geometry.
+    ///
+    /// In shader:
+    ///
+    /// ```text
+    /// d = p - origin
+    /// ```
+    ///
+    /// All gradient evaluation is relative to this point.
+    pub origin: [f32; 2],
 
-        for (index, stop) in self.stops.iter().enumerate() {
-            let [r, g, b, a] =
-                color::pack(stop.map_or(Color::default(), |s| s.color))
-                    .components();
+    /// Primary gradient axis (X axis of gradient space).
+    ///
+    /// Typically:
+    ///
+    /// ```text
+    /// axis_x = end_point - start_point
+    /// ```
+    ///
+    /// This defines:
+    ///
+    /// - Gradient direction (linear)
+    /// - Radius (radial)
+    /// - Angle reference (angular)
+    ///
+    /// Must not be zero-length.
+    pub axis_x: [f32; 2],
 
-            colors[index] = [
-                pack_f16s([f16::from_f32(r), f16::from_f32(g)]),
-                pack_f16s([f16::from_f32(b), f16::from_f32(a)]),
-            ];
+    /// Secondary gradient axis (Y axis of gradient space).
+    ///
+    /// This is perpendicular to `axis_x` and defines the second basis vector
+    /// of the gradient coordinate system.
+    ///
+    /// Typically:
+    ///
+    /// ```text
+    /// axis_y = perp(axis_x) * aspect_ratio
+    /// ```
+    ///
+    /// Where:
+    ///
+    /// - `perp(v) = (-v.y, v.x)`
+    /// - `aspect_ratio` controls ellipse distortion
+    ///
+    /// Used for:
+    ///
+    /// - Elliptical radial gradients
+    /// - Angular gradients
+    /// - Diamond gradients
+    pub axis_y: [f32; 2],
 
-            offsets[index] =
-                stop.map_or(f16::from_f32(2.0), |s| f16::from_f32(s.offset));
-        }
+    /// Gradient type discriminator.
+    ///
+    /// Controls how `t` is computed in shader.
+    ///
+    /// Values:
+    ///
+    /// ```text
+    /// 0 = Linear
+    /// 1 = Radial
+    /// 2 = Angular
+    /// 3 = Diamond
+    /// 
+    /// ```
+    ///
+    /// Shader uses this for branching.
+    pub gradient_type: u32,
+}
 
-        let offsets = [
-            pack_f16s([offsets[0], offsets[1]]),
-            pack_f16s([offsets[2], offsets[3]]),
-            pack_f16s([offsets[4], offsets[5]]),
-            pack_f16s([offsets[6], offsets[7]]),
+/// Pack Gradient → GPU format
+pub fn pack(gradient: &Gradient, bounds: Rectangle) -> Packed {
+    let mut colors = [[0u32; 2]; 8];
+    let mut offsets_f16 = [f16::from_f32(0.0); 8];
+
+    // =========================
+    // 🎨 Colors + Offsets
+    // =========================
+    for (i, stop) in gradient.stops.iter().enumerate() {
+        let stop = stop.unwrap_or(ColorStop {
+            offset: 2.0,
+            color: Color::TRANSPARENT,
+        });
+
+        colors[i] = [
+            pack_f16s([
+                f16::from_f32(stop.color.r),
+                f16::from_f32(stop.color.g),
+            ]),
+            pack_f16s([
+                f16::from_f32(stop.color.b),
+                f16::from_f32(stop.color.a),
+            ]),
         ];
 
-        let direction = [self.start.x, self.start.y, self.end.x, self.end.y];
-
-        Packed {
-            colors,
-            offsets,
-            direction,
-        }
+        offsets_f16[i] = f16::from_f32(stop.offset);
     }
 
-    /// Scales the alpha channel of the [`Linear`] gradient by the given
-    /// factor.
-    pub fn scale_alpha(mut self, factor: f32) -> Self {
-        for stop in self.stops.iter_mut().flatten() {
-            stop.color.a *= factor;
-        }
-        self
-    }
-}
+    let offsets = [
+        pack_f16s([offsets_f16[0], offsets_f16[1]]),
+        pack_f16s([offsets_f16[2], offsets_f16[3]]),
+        pack_f16s([offsets_f16[4], offsets_f16[5]]),
+        pack_f16s([offsets_f16[6], offsets_f16[7]]),
+    ];
 
-/// Packed [`Gradient`] data for use in shader code.
-#[derive(Debug, Copy, Clone, PartialEq, Zeroable, Pod)]
-#[repr(C)]
-pub struct Packed {
-    // 8 colors, each channel = 16 bit float, 2 colors packed into 1 u32
-    colors: [[u32; 2]; 8],
-    // 8 offsets, 8x 16 bit floats packed into 4 u32s
-    offsets: [u32; 4],
-    direction: [f32; 4],
-}
+    // =========================
+    // 🌍 normalized → world
+    // =========================
+    let start = Point {
+        x: bounds.x + gradient.start_point.x * bounds.width,
+        y: bounds.y + gradient.start_point.y * bounds.height,
+    };
 
-/// Creates a new [`Packed`] gradient for use in shader code.
-pub fn pack(gradient: &core::Gradient, bounds: Rectangle) -> Packed {
-    match gradient {
-        core::Gradient::Linear(linear) => {
-            let mut colors = [[0u32; 2]; 8];
-            let mut offsets = [f16::from(0u8); 8];
+    let end = Point {
+        x: bounds.x + gradient.end_point.x * bounds.width,
+        y: bounds.y + gradient.end_point.y * bounds.height,
+    };
 
-            for (index, stop) in linear.stops.iter().enumerate() {
-                let [r, g, b, a] =
-                    color::pack(stop.map_or(Color::default(), |s| s.color))
-                        .components();
+    // =========================
+    // 🔥 仿射坐标系（关键）
+    // =========================
 
-                colors[index] = [
-                    pack_f16s([f16::from_f32(r), f16::from_f32(g)]),
-                    pack_f16s([f16::from_f32(b), f16::from_f32(a)]),
-                ];
+    // 主轴（渐变方向）
+    let axis_x = [
+        end.x - start.x,
+        end.y - start.y,
+    ];
 
-                offsets[index] = stop
-                    .map_or(f16::from_f32(2.0), |s| f16::from_f32(s.offset));
-            }
+    // 垂直轴（逆时针 90°）
+    let perp = [
+        -axis_x[1],
+        axis_x[0],
+    ];
 
-            let offsets = [
-                pack_f16s([offsets[0], offsets[1]]),
-                pack_f16s([offsets[2], offsets[3]]),
-                pack_f16s([offsets[4], offsets[5]]),
-                pack_f16s([offsets[6], offsets[7]]),
-            ];
+    // 👉 椭圆控制（你设计的核心点）
+    let axis_y = [
+        perp[0] * gradient.aspect_ratio,
+        perp[1] * gradient.aspect_ratio,
+    ];
 
-            let (start, end) = linear.angle.to_distance(&bounds);
+    // =========================
+    // 📦 Packed
+    // =========================
+    Packed {
+        colors,
+        offsets,
 
-            let direction = [start.x, start.y, end.x, end.y];
+        origin: [start.x, start.y],
+        axis_x,
+        axis_y,
 
-            Packed {
-                colors,
-                offsets,
-                direction,
-            }
-        }
+        gradient_type: gradient.gradient_type as u32,
     }
 }
 
-/// Packs two f16s into one u32.
+/// Pack two f16 into u32
 fn pack_f16s(f: [f16; 2]) -> u32 {
-    let one = (f[0].to_bits() as u32) << 16;
-    let two = f[1].to_bits() as u32;
-
-    one | two
+    ((f[0].to_bits() as u32) << 16) | (f[1].to_bits() as u32)
 }

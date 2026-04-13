@@ -2,7 +2,7 @@ use clipper2::Paths;
 use lyon::path::Event;
 use lyon::path::iterator::PathIterator;
 use iced_graphics::geometry::{path, LineDash, Path};
-use crate::core::{Point, Vector};
+use crate::core::{Point, Rectangle, Size, Vector};
 use crate::geometry::clip::{clip_by_path, ClipContour, ClipContourPoint};
 use crate::geometry::dashed::dashed_path;
 
@@ -97,6 +97,25 @@ impl FlattenedPath {
 
     pub fn from_path(path: &Path) -> FlattenedPath {
         geometry_path_flatten(path)
+    }
+
+    pub fn get_bounding_rect(&self) -> Rectangle {
+        let mut min_x: f32 = 0.;
+        let mut min_y: f32 = 0.;
+        let mut max_x: f32 = 0.;
+        let mut max_y: f32 = 0.;
+        for contour in &self.contours {
+            for point in &contour.points {
+                min_x = min_x.min(point.x);
+                min_y = min_y.min(point.y);
+                max_x = max_x.max(point.x);
+                max_y = max_y.max(point.y);
+            }
+        }
+        Rectangle::new(
+            Point::new(min_x, min_y),
+            Size::new(max_x - min_x, max_y - min_y),
+        )
     }
 }
 

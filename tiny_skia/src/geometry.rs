@@ -1,11 +1,11 @@
 use crate::Primitive;
 use crate::core::text::LineHeight;
-use crate::core::{self, Pixels, Point, Radians, Rectangle, Size, Svg, Vector};
+use crate::core::{self, Pixels, Point, Radians, Rectangle, Size, Svg, Vector, Gradient};
 use crate::graphics::cache::{self, Cached};
 use crate::graphics::geometry::fill::{self, Fill};
 use crate::graphics::geometry::stroke::{self, Stroke};
 use crate::graphics::geometry::{self, Path, Style};
-use crate::graphics::{self, Gradient, Image, Text};
+use crate::graphics::{self, Image, Text};
 
 use std::sync::Arc;
 
@@ -431,49 +431,47 @@ pub fn into_paint(style: Style) -> tiny_skia::Paint<'static> {
                 tiny_skia::Color::from_rgba(color.b, color.g, color.r, color.a)
                     .expect("Create color"),
             ),
-            Style::Gradient(gradient) => match gradient {
-                Gradient::Linear(linear) => {
-                    let stops: Vec<tiny_skia::GradientStop> = linear
-                        .stops
-                        .into_iter()
-                        .flatten()
-                        .map(|stop| {
-                            tiny_skia::GradientStop::new(
-                                stop.offset,
-                                tiny_skia::Color::from_rgba(
-                                    stop.color.b,
-                                    stop.color.g,
-                                    stop.color.r,
-                                    stop.color.a,
-                                )
-                                .expect("Create color"),
+            Style::Gradient(gradient) => {
+                let stops: Vec<tiny_skia::GradientStop> = gradient
+                    .stops
+                    .into_iter()
+                    .flatten()
+                    .map(|stop| {
+                        tiny_skia::GradientStop::new(
+                            stop.offset,
+                            tiny_skia::Color::from_rgba(
+                                stop.color.b,
+                                stop.color.g,
+                                stop.color.r,
+                                stop.color.a,
                             )
-                        })
-                        .collect();
+                                .expect("Create color"),
+                        )
+                    })
+                    .collect();
 
-                    tiny_skia::LinearGradient::new(
-                        tiny_skia::Point {
-                            x: linear.start.x,
-                            y: linear.start.y,
-                        },
-                        tiny_skia::Point {
-                            x: linear.end.x,
-                            y: linear.end.y,
-                        },
-                        if stops.is_empty() {
-                            vec![tiny_skia::GradientStop::new(
-                                0.0,
-                                tiny_skia::Color::BLACK,
-                            )]
-                        } else {
-                            stops
-                        },
-                        tiny_skia::SpreadMode::Pad,
-                        tiny_skia::Transform::identity(),
-                    )
+                tiny_skia::LinearGradient::new(
+                    tiny_skia::Point {
+                        x: gradient.start_point.x,
+                        y: gradient.start_point.y,
+                    },
+                    tiny_skia::Point {
+                        x: gradient.end_point.x,
+                        y: gradient.end_point.y,
+                    },
+                    if stops.is_empty() {
+                        vec![tiny_skia::GradientStop::new(
+                            0.0,
+                            tiny_skia::Color::BLACK,
+                        )]
+                    } else {
+                        stops
+                    },
+                    tiny_skia::SpreadMode::Pad,
+                    tiny_skia::Transform::identity(),
+                )
                     .expect("Create linear gradient")
-                }
-            },
+            }
         },
         anti_alias: true,
         ..Default::default()

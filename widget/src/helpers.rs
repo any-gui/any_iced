@@ -4,7 +4,7 @@ use crate::checkbox::{self, Checkbox};
 use crate::combo_box::{self, ComboBox};
 use crate::container::{self, Container};
 use crate::core;
-use crate::core::theme;
+use crate::core::{theme, Point};
 use crate::core::widget::operation::{self, Operation};
 use crate::core::window;
 use crate::core::{Element, Length, Size, Widget};
@@ -29,7 +29,7 @@ use crate::{
 
 use std::borrow::Borrow;
 use std::ops::RangeInclusive;
-
+use crate::core::gradient::GradientType;
 pub use crate::table::table;
 
 /// Creates a [`Column`] with the given children.
@@ -1878,9 +1878,13 @@ where
         .padding(text_size * 0.15)
         .style(move |_| container::Style {
             background: Some(
-                gradient::Linear::new(Radians::PI / 4.0)
-                    .add_stop(0.0, color!(0x0033ff))
-                    .add_stop(1.0, color!(0x1177ff))
+                gradient::Gradient::new(
+                    GradientType::Linear,
+                    Point::new(0.,0.5),
+                    Point::new(1.,0.5),
+                )
+                    .with_stop(0.0, color!(0x0033ff))
+                    .with_stop(1.0, color!(0x1177ff))
                     .into()
             ),
             border: border::rounded(border::radius(text_size * 0.4)),

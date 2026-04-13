@@ -7,7 +7,7 @@ pub mod dashed;
 
 use crate::core::text::LineHeight;
 use crate::core::{
-    self, Pixels, Point, Radians, Rectangle, Size, Svg, Transformation, Vector,
+    self, Pixels, Point, Radians, Rectangle, Size, Svg, Transformation, Vector, Gradient
 };
 use crate::graphics::cache::{self, Cached};
 use crate::graphics::color;
@@ -15,7 +15,7 @@ use crate::graphics::geometry::fill::{self, Fill};
 use crate::graphics::geometry::{
     self, LineCap, LineDash, LineJoin, Path, Stroke, Style,
 };
-use crate::graphics::gradient::{self, Gradient};
+use crate::graphics::gradient::{self};
 use crate::graphics::mesh::{self, Mesh};
 use crate::graphics::{Image, Text};
 use crate::text;
@@ -31,6 +31,7 @@ use lyon::lyon_tessellation::{FillGeometryBuilder, StrokeGeometryBuilder};
 use lyon::tessellation::{FillTessellator, StrokeOptions, StrokeTessellator};
 use std::borrow::Cow;
 use std::sync::Arc;
+use iced_graphics::gradient::pack;
 use crate::geometry::coverage_aa::CoverageMesh;
 use crate::geometry::dashed::dashed_path;
 
@@ -164,7 +165,8 @@ impl Frame {
     fn tessellate_coverage_fill(
         &mut self,
         coverage_path: CoverageFillPath,
-        style: Style
+        style: Style,
+        bound_rect: Rectangle,
     ) {
         let CoverageFillPath {
             fill_path,
@@ -174,7 +176,7 @@ impl Frame {
         {
             let mut builder = self
                 .buffers
-                .get_fill(&self.transforms.current.transform_style(style.clone()));
+                .get_fill(&self.transforms.current.transform_style(style.clone()),bound_rect);
             let rule = Rule::EvenOdd;
             let options = tessellation::FillOptions::default()
                 .with_fill_rule(into_fill_rule(rule));
@@ -254,12 +256,14 @@ impl geometry::frame::Backend for Frame {
         if self.use_coverage_aa {
             let scale_factor = self.scale_factor;
             let mut coverage_courter = geometry_path_flatten(path);
+            let bound_rect = coverage_courter.get_bounding_rect();
             let paths = coverage_courter.contours.to_coverage_fill_path(
-                style, scale_factor
+                style, scale_factor,bound_rect
             );
-            self.tessellate_coverage_fill(paths,style);
+            self.tessellate_coverage_fill(paths,style,bound_rect);
         } else {
-            let mut buffer = self.buffers.get_fill(&style);
+            let bound_rect = path.get_bounding_rect();
+            let mut buffer = self.buffers.get_fill(&style,bound_rect);
             let options = tessellation::FillOptions::default()
                 .with_fill_rule(into_fill_rule(rule));
             if self.transforms.current.is_identity() {
@@ -299,6 +303,11 @@ impl geometry::frame::Backend for Frame {
                 lyon::math::Vector::new(size.width, size.height),
             );
 
+        let bound_rect = Rectangle::new(
+            Point::new(top_left.x, top_left.y),
+            Size::new(size.x,size.y),
+        );
+
         if self.use_coverage_aa {
             let scale_factor = self.scale_factor;
             let path = Path::rectangle(
@@ -310,16 +319,16 @@ impl geometry::frame::Backend for Frame {
             let paths: Vec<CoverageFillPath> = coverage_courter
                 .contours
                 .into_iter()
-                .map(|c| c.to_coverage_fill_path(style, scale_factor))
+                .map(|c| c.to_coverage_fill_path(style, scale_factor,bound_rect))
                 .collect();
 
             for path in paths {
-                self.tessellate_coverage_fill(path,style);
+                self.tessellate_coverage_fill(path,style,bound_rect);
             }
         } else {
             let mut buffer = self
                 .buffers
-                .get_fill(&self.transforms.current.transform_style(style));
+                .get_fill(&self.transforms.current.transform_style(style),bound_rect);
             let options = tessellation::FillOptions::default()
                 .with_fill_rule(into_fill_rule(rule));
 
@@ -342,6 +351,8 @@ impl geometry::frame::Backend for Frame {
         options.end_cap = into_line_cap(stroke.line_cap);
         options.line_join = into_line_join(stroke.line_join);
 
+        let bound_rect = path.get_bounding_rect();
+
         let path = if stroke.line_dash.segments.is_empty() {
             Cow::Borrowed(path)
         } else {
@@ -352,18 +363,19 @@ impl geometry::frame::Backend for Frame {
         if self.use_coverage_aa {
             let scale_factor = self.scale_factor;
             let mut coverage_courter = geometry_path_flatten(&path);
+            let bound_rect = coverage_courter.get_bounding_rect();
             let paths: Vec<CoverageFillPath> = coverage_courter.contours
                 .into_iter()
-                .map(|c| c.to_coverage_stroke_path(&stroke, scale_factor))
+                .map(|c| c.to_coverage_stroke_path(&stroke, scale_factor,bound_rect))
                 .collect();
 
             for path in paths {
-                self.tessellate_coverage_fill(path,stroke.style);
+                self.tessellate_coverage_fill(path,stroke.style,bound_rect);
             }
         } else {
             let mut buffer = self
                 .buffers
-                .get_stroke(&self.transforms.current.transform_style(stroke.style));
+                .get_stroke(&self.transforms.current.transform_style(stroke.style),bound_rect);
             if self.transforms.current.is_identity() {
                 self.stroke_tessellator.tessellate_path(
                     path.raw(),
@@ -402,6 +414,11 @@ impl geometry::frame::Backend for Frame {
                 lyon::math::Vector::new(size.width, size.height),
             );
 
+        let bound_rect = Rectangle::new(
+            Point::new(top_left.x, top_left.y),
+            Size::new(size.x,size.y),
+        );
+
         if self.use_coverage_aa {
             let scale_factor = self.scale_factor;
             let path = Path::rectangle(
@@ -412,16 +429,16 @@ impl geometry::frame::Backend for Frame {
             let paths: Vec<CoverageFillPath> = coverage_courter
                 .contours
                 .into_iter()
-                .map(|c| c.to_coverage_stroke_path(&stroke, scale_factor))
+                .map(|c| c.to_coverage_stroke_path(&stroke, scale_factor,bound_rect))
                 .collect();
 
             for path in paths {
-                self.tessellate_coverage_fill(path,stroke.style);
+                self.tessellate_coverage_fill(path,stroke.style,bound_rect);
             }
         } else {
             let mut buffer = self
                 .buffers
-                .get_stroke(&self.transforms.current.transform_style(stroke.style));
+                .get_stroke(&self.transforms.current.transform_style(stroke.style),bound_rect);
 
             let mut options = tessellation::StrokeOptions::default();
             options.line_width = stroke.width;
@@ -654,6 +671,7 @@ impl BufferStack {
     fn get_fill<'a>(
         &'a mut self,
         style: &Style,
+        bound_rect: Rectangle,
     ) -> Box<dyn tessellation::FillGeometryBuilder + 'a> {
         match (style, self.get_mut(style)) {
             (Style::Solid(color), Buffer::Solid(buffer)) => {
@@ -666,7 +684,7 @@ impl BufferStack {
                 Box::new(tessellation::BuffersBuilder::new(
                     buffer,
                     GradientVertex2DBuilder {
-                        gradient: gradient.pack(),
+                        gradient: pack(gradient,bound_rect),
                     },
                 ))
             }
@@ -677,6 +695,7 @@ impl BufferStack {
     fn get_stroke<'a>(
         &'a mut self,
         style: &Style,
+        bound_rect: Rectangle,
     ) -> Box<dyn tessellation::StrokeGeometryBuilder + 'a> {
         match (style, self.get_mut(style)) {
             (Style::Solid(color), Buffer::Solid(buffer)) => {
@@ -689,7 +708,7 @@ impl BufferStack {
                 Box::new(tessellation::BuffersBuilder::new(
                     buffer,
                     GradientVertex2DBuilder {
-                        gradient: gradient.pack(),
+                        gradient: pack(gradient,bound_rect),
                     },
                 ))
             }
@@ -770,12 +789,8 @@ impl Transform {
     }
 
     fn transform_gradient(&self, mut gradient: Gradient) -> Gradient {
-        match &mut gradient {
-            Gradient::Linear(linear) => {
-                linear.start = self.transform_point(linear.start);
-                linear.end = self.transform_point(linear.end);
-            }
-        }
+        gradient.start_point = self.transform_point(gradient.start_point);
+        gradient.end_point = self.transform_point(gradient.end_point);
 
         gradient
     }

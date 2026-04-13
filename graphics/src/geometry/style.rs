@@ -1,5 +1,4 @@
-use crate::core::Color;
-use crate::geometry::Gradient;
+use crate::core::{Color,Gradient};
 
 /// The coloring style of some drawing.
 #[derive(Debug, Clone, Copy, PartialEq)]

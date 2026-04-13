@@ -8,7 +8,8 @@ pub use arc::Arc;
 pub use builder::Builder;
 
 pub use lyon_path;
-
+use lyon_path::PathEvent;
+use iced_core::Rectangle;
 use crate::core::border;
 use crate::core::{Point, Size};
 
@@ -92,5 +93,69 @@ impl Path {
     /// Set flattened
     pub fn with_flattened(self, flattened: bool) -> Self {
         Self { raw: self.raw, flattened }
+    }
+
+    ///Get Bounding Box. For Bézier This is not precise
+    pub fn get_bounding_rect(&self) -> Rectangle {
+        let mut min_x = f32::INFINITY;
+        let mut min_y = f32::INFINITY;
+        let mut max_x = f32::NEG_INFINITY;
+        let mut max_y = f32::NEG_INFINITY;
+
+        let mut update = |p: lyon_path::math::Point| {
+            min_x = min_x.min(p.x);
+            min_y = min_y.min(p.y);
+            max_x = max_x.max(p.x);
+            max_y = max_y.max(p.y);
+        };
+
+        for event in self.raw.iter() {
+            match event {
+                PathEvent::Begin { at } => {
+                    update(at);
+                }
+                PathEvent::Line { from, to } => {
+                    update(from);
+                    update(to);
+                }
+                PathEvent::Quadratic { from, ctrl, to } => {
+                    update(from);
+                    update(ctrl);
+                    update(to);
+                }
+                PathEvent::Cubic {
+                    from,
+                    ctrl1,
+                    ctrl2,
+                    to,
+                } => {
+                    update(from);
+                    update(ctrl1);
+                    update(ctrl2);
+                    update(to);
+                }
+                PathEvent::End { last, first, .. } => {
+                    update(last);
+                    update(first);
+                }
+            }
+        }
+
+        // 处理空路径
+        if min_x == f32::INFINITY {
+            return Rectangle {
+                x: 0.0,
+                y: 0.0,
+                width: 0.0,
+                height: 0.0,
+            };
+        }
+
+        Rectangle {
+            x: min_x,
+            y: min_y,
+            width: max_x - min_x,
+            height: max_y - min_y,
+        }
     }
 }

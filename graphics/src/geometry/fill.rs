@@ -3,8 +3,8 @@
 //! [`Geometry`]: super::Renderer::Geometry
 pub use crate::geometry::Style;
 
-use crate::core::Color;
-use crate::gradient::{self, Gradient};
+use crate::core::{Color,Gradient};
+use crate::gradient::{self};
 
 /// The style used to fill geometry.
 #[derive(Debug, Clone, Copy)]
@@ -47,15 +47,6 @@ impl From<Gradient> for Fill {
     fn from(gradient: Gradient) -> Self {
         Fill {
             style: Style::Gradient(gradient),
-            ..Default::default()
-        }
-    }
-}
-
-impl From<gradient::Linear> for Fill {
-    fn from(gradient: gradient::Linear) -> Self {
-        Fill {
-            style: Style::Gradient(Gradient::Linear(gradient)),
             ..Default::default()
         }
     }

@@ -112,6 +112,7 @@ impl ClipContour {
         self,
         stroke: &Stroke<'_>,
         scale_factor: f32,
+        bound_rect: Rectangle,
     ) -> CoverageFillPath {
         let Self { points, closed } = self;
         let style = stroke.style;
@@ -161,7 +162,7 @@ impl ClipContour {
                 style,
                 rule: Rule::EvenOdd,
             },
-            aa_mesh: build_aa_mesh(stroke, style, scale_factor),
+            aa_mesh: build_aa_mesh(stroke, style, scale_factor,bound_rect),
         }
     }
 
@@ -169,6 +170,7 @@ impl ClipContour {
         self,
         style: iced_graphics::geometry::fill::Style,
         scale_factor: f32,
+        bound_rect: Rectangle,
     ) -> CoverageFillPath {
         let Self { points, closed } = self;
         let mut path: Vec<ClipPoint> = points
@@ -194,7 +196,7 @@ impl ClipContour {
                 style,
                 rule: Rule::EvenOdd,
             },
-            aa_mesh: build_aa_mesh(fill_paths, style, scale_factor),
+            aa_mesh: build_aa_mesh(fill_paths, style, scale_factor,bound_rect),
         }
     }
 
@@ -256,11 +258,17 @@ pub trait VecExt {
         self,
         style: iced_graphics::geometry::fill::Style,
         scale_factor: f32,
+        bound_rect: Rectangle,
     ) -> CoverageFillPath;
 }
 
 impl VecExt for Vec<ClipContour> {
-    fn to_coverage_fill_path(self, style: Style, scale_factor: f32) -> CoverageFillPath {
+    fn to_coverage_fill_path(
+        self,
+        style: Style,
+        scale_factor: f32,
+        bound_rect: Rectangle,
+    ) -> CoverageFillPath {
         let paths = self.into_iter().map(|c|{
             let path: Vec<ClipPoint> = c.points
                 .into_iter()
@@ -283,7 +291,7 @@ impl VecExt for Vec<ClipContour> {
                 style,
                 rule: Rule::EvenOdd,
             },
-            aa_mesh: build_aa_mesh(fill_paths, style, scale_factor),
+            aa_mesh: build_aa_mesh(fill_paths, style, scale_factor,bound_rect),
         }
     }
 }
