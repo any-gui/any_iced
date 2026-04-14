@@ -176,7 +176,7 @@ pub struct Packed {
     /// 1 = Radial
     /// 2 = Angular
     /// 3 = Diamond
-    /// 
+    ///
     /// ```
     ///
     /// Shader uses this for branching.

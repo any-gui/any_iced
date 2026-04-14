@@ -102,7 +102,7 @@ fn gradient_fs_main(input: GradientVertexOutput) -> @location(0) vec4<f32> {
     );
 
     // ✅ 关键修复：使用 world
-    let world = input.position.xy;
+    let world = input.raw_position;
 
     let color = gradient(
         world,

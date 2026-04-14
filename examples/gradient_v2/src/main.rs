@@ -1,5 +1,5 @@
 use iced::time::Instant;
-use iced::{Alignment, Background, Gradient, Length, Point, Rectangle, Renderer, Theme};
+use iced::{Alignment, Background, Gradient, Length, Point, Rectangle, Renderer, Size, Theme};
 use iced::widget::{center, container, column, shader, canvas, row, Canvas};
 use iced::window;
 use iced::{Center, Color, Element, Subscription};
@@ -98,8 +98,8 @@ impl GradientDemo {
         );
         let linear_canvas = Gradient::with_stops(
             GradientType::Linear,
-            Point::new(-0.5, -0.5),
-            Point::new(0.5, 0.5),
+            Point::new(0.5, 0.0),
+            Point::new(1.0, 1.0),
             color_stops,
         );
         let radial_canvas = Gradient::with_stops(
@@ -205,8 +205,8 @@ impl canvas::Program<Message> for RectangleCanvas {
 
         // 创建矩形路径
         let rect = canvas::Path::rounded_rectangle(
-            iced::Point::new(0.0, 0.0),
-            bounds.size(),
+            iced::Point::new(40.0, 80.0),
+            Size::new(160.,80.),
             Radius::new(24)
         );
 

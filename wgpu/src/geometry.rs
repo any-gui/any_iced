@@ -176,7 +176,10 @@ impl Frame {
         {
             let mut builder = self
                 .buffers
-                .get_fill(&self.transforms.current.transform_style(style.clone()),bound_rect);
+                .get_fill(
+                    &self.transforms.current.transform_style(style.clone()),
+                    bound_rect,
+                );
             let rule = Rule::EvenOdd;
             let options = tessellation::FillOptions::default()
                 .with_fill_rule(into_fill_rule(rule));
@@ -263,7 +266,10 @@ impl geometry::frame::Backend for Frame {
             self.tessellate_coverage_fill(paths,style,bound_rect);
         } else {
             let bound_rect = path.get_bounding_rect();
-            let mut buffer = self.buffers.get_fill(&style,bound_rect);
+            let mut buffer = self.buffers.get_fill(
+                &style,
+                bound_rect,
+            );
             let options = tessellation::FillOptions::default()
                 .with_fill_rule(into_fill_rule(rule));
             if self.transforms.current.is_identity() {
@@ -375,7 +381,10 @@ impl geometry::frame::Backend for Frame {
         } else {
             let mut buffer = self
                 .buffers
-                .get_stroke(&self.transforms.current.transform_style(stroke.style),bound_rect);
+                .get_stroke(
+                    &self.transforms.current.transform_style(stroke.style),
+                    bound_rect,
+                );
             if self.transforms.current.is_identity() {
                 self.stroke_tessellator.tessellate_path(
                     path.raw(),
@@ -438,7 +447,10 @@ impl geometry::frame::Backend for Frame {
         } else {
             let mut buffer = self
                 .buffers
-                .get_stroke(&self.transforms.current.transform_style(stroke.style),bound_rect);
+                .get_stroke(
+                    &self.transforms.current.transform_style(stroke.style),
+                    bound_rect,
+                );
 
             let mut options = tessellation::StrokeOptions::default();
             options.line_width = stroke.width;

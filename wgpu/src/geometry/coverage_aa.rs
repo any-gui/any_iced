@@ -1,11 +1,11 @@
-use clipper2::{Paths};
-use iced_graphics::{color};
-use iced_graphics::geometry::{Style};
-use crate::geometry::clip::{signed_area, ClipContourPoint};
-use clipper2::{Point as ClipPoint};
+use crate::core::Rectangle;
+use crate::geometry::clip::{ClipContourPoint, signed_area};
+use clipper2::Paths;
+use clipper2::Point as ClipPoint;
+use iced_graphics::color;
+use iced_graphics::geometry::Style;
 use iced_graphics::gradient::pack;
 use iced_graphics::mesh::{GradientVertex2D, Indexed, SolidVertex2D};
-use crate::core::Rectangle;
 
 pub const AA_FEATHER_ONE_SIDE: f32 = 0.5;
 
@@ -49,7 +49,7 @@ pub fn build_aa_mesh(
     paths: Paths,
     style: Style,
     scale_factor: f32,
-    bound_rect: Rectangle
+    bound_rect: Rectangle,
 ) -> CoverageMesh {
     let mut vertices: Vec<CoverageVertex> = vec![];
     let mut indices: Vec<u32> = vec![];
@@ -94,23 +94,22 @@ pub fn build_aa_mesh(
             let l2_d = e_next;
 
             // ---------- 求交点 A1 ----------
-            let mut p_outer = if let Some(ip) =
-                line_intersection(l1_p, l1_d, l2_p, l2_d)
-            {
-                // ---------- miter limit ----------
-                let v = ip.sub(p1);
-                let len = v.length();
+            let mut p_outer =
+                if let Some(ip) = line_intersection(l1_p, l1_d, l2_p, l2_d) {
+                    // ---------- miter limit ----------
+                    let v = ip.sub(p1);
+                    let len = v.length();
 
-                if len > miter_limit {
-                    p1.add(v.normalize().mul(miter_limit))
+                    if len > miter_limit {
+                        p1.add(v.normalize().mul(miter_limit))
+                    } else {
+                        ip
+                    }
                 } else {
-                    ip
-                }
-            } else {
-                // 平行边 fallback：退化为平均法线
-                let n_avg = n_prev.add(n_next).normalize();
-                p1.add(n_avg.mul(aa_radius))
-            };
+                    // 平行边 fallback：退化为平均法线
+                    let n_avg = n_prev.add(n_next).normalize();
+                    p1.add(n_avg.mul(aa_radius))
+                };
 
             // ============================================================
             // 🔥【关键改动 2】确保 coverage 梯度方向对 inner/outer 一致
@@ -130,14 +129,16 @@ pub fn build_aa_mesh(
             let i2 = base + (((i + 1) % n) * 2) as u32;
             let i3 = base + (((i + 1) % n) * 2 + 1) as u32;
 
-            indices.extend_from_slice(&[
-                i0, i1, i3,
-                i0, i3, i2,
-            ]);
+            indices.extend_from_slice(&[i0, i1, i3, i0, i3, i2]);
         }
     }
 
-    build_mesh_from_coverage_vertices(vertices, indices, style, bound_rect)
+    build_mesh_from_coverage_vertices(
+        vertices,
+        indices,
+        style,
+        bound_rect,
+    )
 }
 
 fn outward_normal(edge: ClipContourPoint, is_outer: bool) -> ClipContourPoint {
@@ -199,20 +200,18 @@ fn build_mesh_from_coverage_vertices(
                 },
             }
         }
-        Style::Gradient(gradient) => {
-            CoverageMesh::Gradient {
-                buffers: Indexed {
-                    vertices: vertices
-                        .into_iter()
-                        .map(|v| GradientVertex2D {
-                            position: v.position,
-                            gradient: pack(&gradient,bound_rect),
-                            coverage: v.coverage,
-                        })
-                        .collect(),
-                    indices,
-                },
-            }
-        }
+        Style::Gradient(gradient) => CoverageMesh::Gradient {
+            buffers: Indexed {
+                vertices: vertices
+                    .into_iter()
+                    .map(|v| GradientVertex2D {
+                        position: v.position,
+                        gradient: pack(&gradient, bound_rect),
+                        coverage: v.coverage,
+                    })
+                    .collect(),
+                indices,
+            },
+        },
     }
 }
